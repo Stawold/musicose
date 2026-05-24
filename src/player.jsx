@@ -32,6 +32,10 @@ const isCorrect = (answer, correct) => {
 const roundNames = ["Chansons en rafale", "Le Focus", "Fast and Musicous", "Le battle Royal d'Ose"];
 
 export default function Player() {
+  const [joinStep, setJoinStep] = useState("pseudo"); // "pseudo" | "code" | "joined"
+  const [pseudoInput, setPseudoInput] = useState("");
+  const [codeInput, setCodeInput] = useState("");
+
   const [title, setTitle] = useState("");
   const [artist, setArtist] = useState("");
   const [secondsLeft, setSecondsLeft] = useState(0);
@@ -46,7 +50,6 @@ export default function Player() {
   const [correctAnswer, setCorrectAnswer] = useState(null);
   const [showRanking, setShowRanking] = useState(false);
   const [rankingData, setRankingData] = useState([]);
-  const [joined, setJoined] = useState(false);
 
   const KVDB_BASE = "https://kvdb.io/GVkYCf2Kfn44jq3EYGweRj/";
 
@@ -61,90 +64,72 @@ export default function Player() {
     }
   };
 
-  // Sauvegarde du joueur dans localStorage
-  const savePlayerData = (pseudo, round, scores) => {
-    const playerData = {
-      pseudo,
-      currentRound: round,
-      scores,
-      timestamp: Date.now(),
-    };
-    localStorage.setItem("musicose_player", JSON.stringify(playerData));
-  };
-
-  // Récupération du joueur depuis localStorage
-  const loadPlayerData = () => {
-    const stored = localStorage.getItem("musicose_player");
-    if (stored) {
-      try {
-        return JSON.parse(stored);
-      } catch (e) {
-        console.error("Erreur parsing playerData:", e);
-        return null;
+  const handleJoinGame = async () => {
+    if (joinStep === "pseudo") {
+      if (!pseudoInput.trim()) {
+        alert("Entre un pseudo !");
+        return;
       }
+      setPseudo(pseudoInput);
+      setJoinStep("code");
+      return;
     }
-    return null;
-  };
 
-  useEffect(() => {
-    const newPeer = new Peer();
-    setPeer(newPeer);
-
-    newPeer.on("open", async () => {
-      const savedData = loadPlayerData();
-      let chosenPseudo = savedData?.pseudo || prompt("Entre ton pseudo :") || "Joueur";
-      setPseudo(chosenPseudo);
-
-      let provided = prompt("Entre le code (OSE-XXXX) ou colle l'ID complet de l'hôte :");
-      if (!provided) {
-        alert("Code ou ID invalide !");
+    if (joinStep === "code") {
+      if (!codeInput.trim()) {
+        alert("Entre un code !");
         return;
       }
 
-      let realHostId = provided.trim();
-      if (provided.toUpperCase().startsWith("OSE-")) {
-        const resolved = await resolveShortCode(provided.toUpperCase());
-        if (!resolved) {
-          alert("❌ Code introuvable. Vérifie le code ou demande à l'hôte.");
-          return;
+      const newPeer = new Peer();
+      setPeer(newPeer);
+
+      newPeer.on("open", async () => {
+        let realHostId = codeInput.trim();
+        if (codeInput.toUpperCase().startsWith("OSE-")) {
+          const resolved = await resolveShortCode(codeInput.toUpperCase());
+          if (!resolved) {
+            alert("❌ Code introuvable. Vérifie le code ou demande à l'hôte.");
+            return;
+          }
+          realHostId = resolved;
         }
-        realHostId = resolved;
-      }
 
-      const connection = newPeer.connect(realHostId);
-      setConn(connection);
+        const connection = newPeer.connect(realHostId);
+        setConn(connection);
 
-      connection.on("open", () => {
-        connection.send({ type: "newPlayer", pseudo: chosenPseudo });
-        setJoined(true);
+        connection.on("open", () => {
+          connection.send({ type: "newPlayer", pseudo: pseudoInput });
+          setJoinStep("joined");
+        });
+
+        connection.on("data", (data) => {
+          if (data.type === "startTimer") {
+            setCorrectAnswer(null);
+            setSecondsLeft(data.seconds);
+            setCanPlay(true);
+            setCurrentSongIndex(typeof data.songIndex === "number" ? data.songIndex : null);
+            if (typeof data.round === "number") setCurrentRound(data.round);
+            setRoundStartTime(Date.now());
+          } else if (data.type === "eliminatedRound4") {
+            setActiveRound4(false);
+          } else if (data.type === "revealAnswer") {
+            setCorrectAnswer({ title: data.title || "", artist: data.artist || "" });
+            setCanPlay(false);
+          } else if (data.type === "showRanking") {
+            setRankingData(data.ranking || []);
+            setShowRanking(true);
+            setCanPlay(false);
+          } else if (data.type === "showFinalRanking") {
+            setRankingData(data.ranking || []);
+            setShowRanking(true);
+            setCanPlay(false);
+            alert("🎊 Fin du jeu ! Voici le classement final !");
+          }
+        });
       });
-
-      connection.on("data", (data) => {
-        if (data.type === "startTimer") {
-          setCorrectAnswer(null);
-          setSecondsLeft(data.seconds);
-          setCanPlay(true);
-          setCurrentSongIndex(typeof data.songIndex === "number" ? data.songIndex : null);
-          if (typeof data.round === "number") setCurrentRound(data.round);
-          setRoundStartTime(Date.now());
-        } else if (data.type === "eliminatedRound4") {
-          setActiveRound4(false);
-        } else if (data.type === "revealAnswer") {
-          setCorrectAnswer({ title: data.title || "", artist: data.artist || "" });
-          setCanPlay(false);
-        } else if (data.type === "showRanking") {
-          setRankingData(data.ranking || []);
-          setShowRanking(true);
-          setCanPlay(false);
-        } else if (data.type === "showFinalRanking") {
-          setRankingData(data.ranking || []);
-          setShowRanking(true);
-          setCanPlay(false);
-          alert("🎊 Fin du jeu ! Voici le classement final !");
-        }
-      });
-    });
-  }, []);
+    }
+  };
 
   // Timer
   useEffect(() => {
@@ -197,16 +182,66 @@ export default function Player() {
     position: "relative",
   };
 
-  if (!joined)
+  // ÉCRAN D'INSCRIPTION
+  if (joinStep !== "joined") {
     return (
       <div style={containerStyle}>
-        <h1 style={{ fontSize: "2.5rem", color: "var(--mo-magenta)" }}>Music'Ose</h1>
-        <p style={{ fontSize: "1.5rem", marginTop: "2rem", color: "var(--mo-cyan)" }}>
-          Connexion en cours…
-        </p>
+        <h1 style={{ fontSize: "2.5rem", color: "var(--mo-magenta)", marginBottom: "2rem" }}>
+          Music'Ose
+        </h1>
+
+        <Panel style={{ maxWidth: "350px", width: "90%" }}>
+          {joinStep === "pseudo" && (
+            <>
+              <Eyebrow>Étape 1</Eyebrow>
+              <p style={{ marginTop: "1rem", marginBottom: "1.5rem", color: "var(--mo-ink-dim)" }}>
+                Quel est ton pseudo ?
+              </p>
+              <Input
+                color="magenta"
+                type="text"
+                value={pseudoInput}
+                onChange={(e) => setPseudoInput(e.target.value)}
+                onKeyPress={(e) => e.key === "Enter" && handleJoinGame()}
+                placeholder="Ton pseudo"
+                autoComplete="off"
+                spellCheck="false"
+                style={{ marginBottom: "1rem", WebkitUserSelect: "text" }}
+              />
+              <Btn variant="magenta" onClick={handleJoinGame} style={{ width: "100%" }}>
+                Continuer
+              </Btn>
+            </>
+          )}
+
+          {joinStep === "code" && (
+            <>
+              <Eyebrow>Étape 2</Eyebrow>
+              <p style={{ marginTop: "1rem", marginBottom: "1.5rem", color: "var(--mo-ink-dim)" }}>
+                Code de la partie (OSE-XXXX ou ID complet)
+              </p>
+              <Input
+                color="cyan"
+                type="text"
+                value={codeInput}
+                onChange={(e) => setCodeInput(e.target.value)}
+                onKeyPress={(e) => e.key === "Enter" && handleJoinGame()}
+                placeholder="Code"
+                autoComplete="off"
+                spellCheck="false"
+                style={{ marginBottom: "1rem", WebkitUserSelect: "text" }}
+              />
+              <Btn variant="cyan" onClick={handleJoinGame} style={{ width: "100%" }}>
+                Rejoindre
+              </Btn>
+            </>
+          )}
+        </Panel>
       </div>
     );
+  }
 
+  // ÉCRAN DE JEU
   return (
     <div style={containerStyle}>
       <h1 style={{ fontSize: "clamp(2rem, 6vw, 3rem)", color: "var(--mo-magenta)", marginBottom: "0.5rem" }}>
