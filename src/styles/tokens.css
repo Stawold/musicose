@@ -1,0 +1,348 @@
+/* ============================================================
+   MUSIC'OSE — DESIGN TOKENS (DA "Néon Discothèque")
+   Drop-in CSS — copy into your project's global stylesheet.
+   ============================================================ */
+
+/* --- Fonts (Google Fonts) -------------------------------- */
+@import url('https://fonts.googleapis.com/css2?family=Bungee&family=Space+Grotesk:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap');
+
+/* --- Design tokens --------------------------------------- */
+:root {
+  /* Backgrounds */
+  --mo-bg-0: #07021a;          /* deepest midnight */
+  --mo-bg-1: #140634;          /* midnight */
+  --mo-bg-2: #1e0a47;          /* raised surface */
+
+  /* Ink */
+  --mo-ink:        #fbf5ff;    /* primary text on dark */
+  --mo-ink-dim:    #b9a8d8;    /* secondary text */
+  --mo-ink-faint:  rgba(255,255,255,0.3);
+
+  /* Neon accents */
+  --mo-magenta: #ff2d95;       /* primary action / player */
+  --mo-cyan:    #00e5ff;       /* secondary / host */
+  --mo-gold:    #ffd60a;       /* highlight / reveal */
+  --mo-violet:  #b14bff;       /* tertiary */
+
+  /* Lines & overlays */
+  --mo-line:        rgba(255,255,255,0.08);
+  --mo-line-strong: rgba(255,255,255,0.16);
+
+  /* Type — pairing */
+  --mo-font-display: 'Bungee', 'Impact', system-ui, sans-serif;
+  --mo-font-body:    'Space Grotesk', system-ui, sans-serif;
+  --mo-font-mono:    'DM Mono', 'Space Mono', ui-monospace, monospace;
+
+  /* Radii */
+  --mo-r-sm: 8px;
+  --mo-r-md: 14px;
+  --mo-r-lg: 18px;
+  --mo-r-pill: 999px;
+
+  /* Spacing scale (4px base) */
+  --mo-sp-1: 4px;
+  --mo-sp-2: 8px;
+  --mo-sp-3: 12px;
+  --mo-sp-4: 16px;
+  --mo-sp-5: 24px;
+  --mo-sp-6: 32px;
+  --mo-sp-7: 48px;
+
+  /* Shadows & glows */
+  --mo-glow-magenta: 0 0 20px rgba(255, 45, 149, 0.6);
+  --mo-glow-cyan:    0 0 20px rgba(0, 229, 255, 0.6);
+  --mo-glow-gold:    0 0 20px rgba(255, 214, 10, 0.6);
+  --mo-glow-violet:  0 0 20px rgba(177, 75, 255, 0.6);
+}
+
+/* --- Global reset & base styles ----------------------- */
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--mo-bg-0);
+  color: var(--mo-ink);
+  font-family: var(--mo-font-body);
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  overflow-x: hidden;
+}
+
+/* --- Typography ----------------------------------------- */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--mo-font-display);
+  font-weight: 900;
+  margin: 0;
+  letter-spacing: 0.02em;
+}
+
+h1 { font-size: clamp(2.5rem, 6vw, 4rem); }
+h2 { font-size: clamp(2rem, 5vw, 3rem); }
+h3 { font-size: clamp(1.5rem, 4vw, 2rem); }
+
+p { margin: 0; }
+
+/* --- Buttons base -------------------------------------- */
+button {
+  all: unset;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.2s ease;
+}
+
+/* .mo-btn — primary button pill ---------------------- */
+.mo-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--mo-sp-3);
+  padding: var(--mo-sp-3) var(--mo-sp-5);
+  border-radius: var(--mo-r-pill);
+  background: var(--mo-magenta);
+  color: #000;
+  font-family: var(--mo-font-display);
+  font-size: clamp(1rem, 2vw, 1.2rem);
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  box-shadow: var(--mo-glow-magenta);
+  border: 2px solid var(--mo-magenta);
+}
+
+.mo-btn:hover {
+  transform: scale(1.05);
+  box-shadow: 0 0 40px rgba(255, 45, 149, 0.8);
+}
+
+.mo-btn:active {
+  transform: scale(0.98);
+}
+
+.mo-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Button variants */
+.mo-btn--cyan {
+  background: var(--mo-cyan);
+  border-color: var(--mo-cyan);
+  color: #000;
+  box-shadow: var(--mo-glow-cyan);
+}
+
+.mo-btn--cyan:hover {
+  box-shadow: 0 0 40px rgba(0, 229, 255, 0.8);
+}
+
+.mo-btn--gold {
+  background: var(--mo-gold);
+  border-color: var(--mo-gold);
+  color: #000;
+  box-shadow: var(--mo-glow-gold);
+}
+
+.mo-btn--gold:hover {
+  box-shadow: 0 0 40px rgba(255, 214, 10, 0.8);
+}
+
+.mo-btn--ghost {
+  background: transparent;
+  border-color: var(--mo-ink);
+  color: var(--mo-ink);
+  box-shadow: none;
+}
+
+.mo-btn--ghost:hover {
+  background: var(--mo-ink-faint);
+  box-shadow: 0 0 20px rgba(255, 255, 255, 0.2);
+}
+
+/* --- Chip (small label) -------------------------------- */
+.mo-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--mo-sp-2);
+  padding: var(--mo-sp-2) var(--mo-sp-4);
+  border-radius: var(--mo-r-pill);
+  background: var(--mo-line-strong);
+  color: var(--mo-ink-dim);
+  font-family: var(--mo-font-mono);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  border: 1px solid var(--mo-line-strong);
+}
+
+.mo-chip__dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--mo-magenta);
+  animation: mo-pulse 2s ease-in-out infinite;
+}
+
+/* --- Input ---------------------------------------------- */
+.mo-input {
+  display: block;
+  width: 100%;
+  padding: var(--mo-sp-3) var(--mo-sp-4);
+  border-radius: var(--mo-r-md);
+  border: 2px solid var(--mo-cyan);
+  background: var(--mo-bg-2);
+  color: var(--mo-ink);
+  font-family: inherit;
+  font-size: 1rem;
+  transition: all 0.2s ease;
+}
+
+.mo-input:focus {
+  outline: none;
+  border-color: var(--mo-cyan);
+  box-shadow: var(--mo-glow-cyan);
+}
+
+.mo-input--magenta {
+  border-color: var(--mo-magenta);
+}
+
+.mo-input--magenta:focus {
+  border-color: var(--mo-magenta);
+  box-shadow: var(--mo-glow-magenta);
+}
+
+/* --- Panel (glass card) -------------------------------- */
+.mo-panel {
+  border-radius: var(--mo-r-lg);
+  background: rgba(20, 6, 52, 0.4);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--mo-line-strong);
+  padding: var(--mo-sp-5);
+}
+
+/* --- Eyebrow (mono label) ------------------------------- */
+.mo-eyebrow {
+  font-family: var(--mo-font-mono);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--mo-ink-dim);
+}
+
+/* --- Equalizer (animated bars) ------------------------- */
+.mo-eq {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 6px;
+  height: 40px;
+}
+
+.mo-eq i {
+  display: block;
+  width: 4px;
+  background: var(--mo-magenta);
+  border-radius: 2px;
+  box-shadow: var(--mo-glow-magenta);
+  animation: mo-eq 0.6s ease-in-out infinite;
+}
+
+.mo-eq i:nth-child(1) { animation-delay: 0.0s; height: 20%; }
+.mo-eq i:nth-child(2) { animation-delay: 0.1s; height: 40%; }
+.mo-eq i:nth-child(3) { animation-delay: 0.2s; height: 60%; }
+.mo-eq i:nth-child(4) { animation-delay: 0.3s; height: 80%; }
+.mo-eq i:nth-child(5) { animation-delay: 0.4s; height: 100%; }
+.mo-eq i:nth-child(6) { animation-delay: 0.3s; height: 80%; }
+.mo-eq i:nth-child(7) { animation-delay: 0.2s; height: 60%; }
+.mo-eq i:nth-child(8) { animation-delay: 0.1s; height: 40%; }
+.mo-eq i:nth-child(9) { animation-delay: 0.0s; height: 20%; }
+
+/* --- Decorative layers --------------------------------- */
+.mo-stars {
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(1px 1px at 20px 30px, #eee, rgba(0,0,0,0)),
+    radial-gradient(1px 1px at 60px 70px, #fff, rgba(0,0,0,0)),
+    radial-gradient(1px 1px at 50px 50px, #ddd, rgba(0,0,0,0)),
+    radial-gradient(1px 1px at 130px 80px, #fff, rgba(0,0,0,0)),
+    radial-gradient(1px 1px at 90px 10px, #eee, rgba(0,0,0,0));
+  background-repeat: repeat;
+  background-size: 200px 200px;
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.mo-grid-floor {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(0deg, var(--mo-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--mo-line) 1px, transparent 1px);
+  background-size: 40px 40px;
+  opacity: 0.15;
+  pointer-events: none;
+  transform: perspective(1200px) rotateX(60deg) translateZ(-100px);
+}
+
+/* --- Animations --------------------------------------- */
+@keyframes mo-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+@keyframes mo-eq {
+  0%, 100% { height: 20%; }
+  50% { height: 100%; }
+}
+
+@keyframes mo-rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes mo-glow-pulse {
+  0%, 100% { box-shadow: var(--mo-glow-magenta); }
+  50% { box-shadow: 0 0 40px rgba(255, 45, 149, 0.3); }
+}
+
+@keyframes mo-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+/* --- Neon text effect ---------------------------------- */
+.mo-neon {
+  color: var(--mo-magenta);
+  text-shadow:
+    0 0 10px var(--mo-magenta),
+    0 0 20px var(--mo-magenta),
+    0 0 30px var(--mo-magenta);
+}
+
+.mo-neon--cyan {
+  color: var(--mo-cyan);
+  text-shadow:
+    0 0 10px var(--mo-cyan),
+    0 0 20px var(--mo-cyan),
+    0 0 30px var(--mo-cyan);
+}
+
+.mo-neon--gold {
+  color: var(--mo-gold);
+  text-shadow:
+    0 0 10px var(--mo-gold),
+    0 0 20px var(--mo-gold),
+    0 0 30px var(--mo-gold);
+}
