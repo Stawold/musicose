@@ -30,6 +30,8 @@ const isCorrect = (answer, correct) => {
 };
 
 export default function Host() {
+  const [authenticated, setAuthenticated] = useState(false);
+  const [passwordInput, setPasswordInput] = useState("");
   const [connections, setConnections] = useState([]);
   const [peer, setPeer] = useState(null);
   const [responses, setResponses] = useState([]);
@@ -57,14 +59,15 @@ export default function Host() {
 
   const HOST_PASSWORD = "melbose";
 
-  // Authentification hôte
-  useEffect(() => {
-    const enteredPassword = prompt("Veuillez entrer le mot de passe pour accéder à l'espace Hôte :");
-    if (enteredPassword !== HOST_PASSWORD) {
-      alert("Mot de passe incorrect. Redirection vers l'accueil.");
-      window.location.href = "/";
+  // Vérification mot de passe
+  const handleAuthSubmit = () => {
+    if (passwordInput === HOST_PASSWORD) {
+      setAuthenticated(true);
+    } else {
+      alert("❌ Mot de passe incorrect !");
+      setPasswordInput("");
     }
-  }, []);
+  };
 
   // Envoi classement (manches)
   const sendRankingToPlayers = () => {
@@ -125,6 +128,8 @@ export default function Host() {
 
   // PeerJS
   useEffect(() => {
+    if (!authenticated) return;
+
     const newPeer = new Peer();
     setPeer(newPeer);
 
@@ -233,7 +238,7 @@ export default function Host() {
     return () => {
       if (newPeer) newPeer.destroy();
     };
-  }, []);
+  }, [authenticated]);
 
   // Timer
   useEffect(() => {
@@ -302,7 +307,59 @@ export default function Host() {
 
   const currentSong = playlist && playlist.songs ? playlist.songs[currentSongIndex] : null;
 
-  // Styles
+  // ÉCRAN DE CONNEXION (avant authentification)
+  if (!authenticated) {
+    return (
+      <div
+        style={{
+          background: "linear-gradient(135deg, var(--mo-bg-0) 0%, var(--mo-bg-1) 100%)",
+          color: "var(--mo-ink)",
+          fontFamily: "var(--mo-font-display)",
+          minHeight: "100vh",
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "center",
+          alignItems: "center",
+          textAlign: "center",
+          padding: "2rem",
+          width: "100%",
+        }}
+      >
+        <h1 style={{ fontSize: "3rem", color: "var(--mo-cyan)", marginBottom: "2rem" }}>
+          Music'Ose
+        </h1>
+        <Panel style={{ maxWidth: "400px", width: "90%" }}>
+          <Eyebrow>Accès Hôte</Eyebrow>
+          <p style={{ marginTop: "1rem", marginBottom: "1.5rem", color: "var(--mo-ink-dim)" }}>
+            Entre le mot de passe pour accéder à la régie
+          </p>
+          <input
+            type="password"
+            value={passwordInput}
+            onChange={(e) => setPasswordInput(e.target.value)}
+            onKeyPress={(e) => e.key === "Enter" && handleAuthSubmit()}
+            placeholder="Mot de passe"
+            style={{
+              width: "100%",
+              padding: "0.8rem",
+              borderRadius: "8px",
+              border: "2px solid var(--mo-cyan)",
+              background: "var(--mo-bg-2)",
+              color: "var(--mo-ink)",
+              fontSize: "1rem",
+              marginBottom: "1rem",
+              fontFamily: "inherit",
+            }}
+          />
+          <Btn variant="cyan" onClick={handleAuthSubmit} style={{ width: "100%" }}>
+            Valider
+          </Btn>
+        </Panel>
+      </div>
+    );
+  }
+
+  // ÉCRAN RÉGIE HÔTE (après authentification)
   const containerStyle = {
     background: "linear-gradient(135deg, var(--mo-bg-0) 0%, var(--mo-bg-1) 100%)",
     color: "var(--mo-ink)",
