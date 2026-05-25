@@ -49,10 +49,17 @@
   --mo-sp-7: 48px;
 
   /* Shadows & glows */
-  --mo-glow-magenta: 0 0 20px rgba(255, 45, 149, 0.6);
-  --mo-glow-cyan:    0 0 20px rgba(0, 229, 255, 0.6);
-  --mo-glow-gold:    0 0 20px rgba(255, 214, 10, 0.6);
-  --mo-glow-violet:  0 0 20px rgba(177, 75, 255, 0.6);
+  --mo-shadow-card:  0 8px 24px rgba(0,0,0,0.4);
+  --mo-glow-magenta: 0 0 12px rgba(255,45,149,0.5), 0 0 30px rgba(255,45,149,0.25);
+  --mo-glow-cyan:    0 0 12px rgba(0,229,255,0.5),  0 0 30px rgba(0,229,255,0.25);
+  --mo-glow-gold:    0 0 12px rgba(255,214,10,0.55), 0 0 30px rgba(255,214,10,0.25);
+  --mo-glow-violet:  0 0 12px rgba(177,75,255,0.5),  0 0 30px rgba(177,75,255,0.25);
+  --mo-glow-text:    0 0 6px currentColor, 0 0 14px currentColor, 0 0 30px currentColor;
+
+  /* Motion */
+  --mo-ease:     cubic-bezier(.2,.7,.3,1);
+  --mo-dur-fast: 140ms;
+  --mo-dur-med:  240ms;
 }
 
 /* --- Global reset & base styles ----------------------- */
@@ -79,7 +86,6 @@ body {
 /* --- Typography ----------------------------------------- */
 h1, h2, h3, h4, h5, h6 {
   font-family: var(--mo-font-display);
-  font-weight: 900;
   margin: 0;
   letter-spacing: 0.02em;
 }
@@ -87,6 +93,9 @@ h1, h2, h3, h4, h5, h6 {
 h1 { font-size: clamp(2.5rem, 6vw, 4rem); }
 h2 { font-size: clamp(2rem, 5vw, 3rem); }
 h3 { font-size: clamp(1.5rem, 4vw, 2rem); }
+h4 { font-size: clamp(1.25rem, 3vw, 1.5rem); }
+h5 { font-size: clamp(1rem, 2.5vw, 1.25rem); }
+h6 { font-size: clamp(0.875rem, 2vw, 1rem); }
 
 p { margin: 0; }
 
@@ -95,254 +104,286 @@ button {
   all: unset;
   cursor: pointer;
   font-family: inherit;
-  transition: all 0.2s ease;
 }
 
-/* .mo-btn — primary button pill ---------------------- */
-.mo-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--mo-sp-3);
-  padding: var(--mo-sp-3) var(--mo-sp-5);
-  border-radius: var(--mo-r-pill);
-  background: var(--mo-magenta);
-  color: #000;
-  font-family: var(--mo-font-display);
-  font-size: clamp(1rem, 2vw, 1.2rem);
-  font-weight: 900;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  box-shadow: var(--mo-glow-magenta);
-  border: 2px solid var(--mo-magenta);
-}
-
-.mo-btn:hover {
-  transform: scale(1.05);
-  box-shadow: 0 0 40px rgba(255, 45, 149, 0.8);
-}
-
-.mo-btn:active {
-  transform: scale(0.98);
-}
-
-.mo-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* Button variants */
-.mo-btn--cyan {
-  background: var(--mo-cyan);
-  border-color: var(--mo-cyan);
-  color: #000;
-  box-shadow: var(--mo-glow-cyan);
-}
-
-.mo-btn--cyan:hover {
-  box-shadow: 0 0 40px rgba(0, 229, 255, 0.8);
-}
-
-.mo-btn--gold {
-  background: var(--mo-gold);
-  border-color: var(--mo-gold);
-  color: #000;
-  box-shadow: var(--mo-glow-gold);
-}
-
-.mo-btn--gold:hover {
-  box-shadow: 0 0 40px rgba(255, 214, 10, 0.8);
-}
-
-.mo-btn--ghost {
-  background: transparent;
-  border-color: var(--mo-ink);
+/* --- App background ------------------------------------ */
+.mo-app {
+  font-family: var(--mo-font-body);
   color: var(--mo-ink);
-  box-shadow: none;
+  background:
+    radial-gradient(ellipse 70% 50% at 50% 0%,  rgba(255,45,149,0.18), transparent 60%),
+    radial-gradient(ellipse 60% 40% at 50% 100%, rgba(0,229,255,0.12),  transparent 60%),
+    linear-gradient(180deg, var(--mo-bg-1) 0%, var(--mo-bg-0) 100%);
+  min-height: 100vh;
 }
 
-.mo-btn--ghost:hover {
-  background: var(--mo-ink-faint);
-  box-shadow: 0 0 20px rgba(255, 255, 255, 0.2);
+/* --- Type utilities ------------------------------------- */
+.mo-display {
+  font-family: var(--mo-font-display);
+  letter-spacing: 0.01em;
+  line-height: 0.95;
+}
+
+.mo-mono { font-family: var(--mo-font-mono); }
+
+.mo-neon { text-shadow: var(--mo-glow-text); }
+
+.mo-neon--cyan {
+  color: var(--mo-cyan);
+  text-shadow: var(--mo-glow-text);
+}
+
+.mo-neon--gold {
+  color: var(--mo-gold);
+  text-shadow: var(--mo-glow-text);
+}
+
+/* --- Eyebrow (mono label) ------------------------------- */
+.mo-eyebrow {
+  font-family: var(--mo-font-mono);
+  font-size: 10px;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--mo-ink-dim);
 }
 
 /* --- Chip (small label) -------------------------------- */
 .mo-chip {
   display: inline-flex;
   align-items: center;
-  gap: var(--mo-sp-2);
-  padding: var(--mo-sp-2) var(--mo-sp-4);
-  border-radius: var(--mo-r-pill);
-  background: var(--mo-line-strong);
-  color: var(--mo-ink-dim);
+  gap: 8px;
   font-family: var(--mo-font-mono);
-  font-size: 0.75rem;
-  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
-  letter-spacing: 0.15em;
-  border: 1px solid var(--mo-line-strong);
+  padding: 6px 12px;
+  border-radius: var(--mo-r-pill);
+  border: 1px solid var(--mo-line);
+  background: rgba(255,255,255,0.04);
+  color: var(--mo-ink-dim);
 }
 
 .mo-chip__dot {
   display: inline-block;
   width: 6px;
   height: 6px;
-  border-radius: 50%;
-  background: var(--mo-magenta);
+  border-radius: var(--mo-r-pill);
+  background: var(--mo-cyan);
+  box-shadow: 0 0 8px var(--mo-cyan);
   animation: mo-pulse 2s ease-in-out infinite;
+}
+
+/* --- Buttons -------------------------------------------- */
+.mo-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-family: var(--mo-font-display);
+  font-size: 14px;
+  letter-spacing: 0.06em;
+  padding: 14px 22px;
+  border-radius: var(--mo-r-pill);
+  cursor: pointer;
+  user-select: none;
+  border: 1.5px solid var(--mo-magenta);
+  background: linear-gradient(180deg, rgba(255,45,149,0.18), rgba(255,45,149,0.06));
+  color: var(--mo-ink);
+  box-shadow:
+    inset 0 0 0 1px rgba(255,45,149,0.4),
+    0 0 18px rgba(255,45,149,0.4),
+    var(--mo-shadow-card);
+  transition:
+    transform var(--mo-dur-fast) var(--mo-ease),
+    box-shadow var(--mo-dur-fast) var(--mo-ease);
+}
+
+.mo-btn:hover  { transform: translateY(-1px); }
+.mo-btn:active { transform: translateY(0); }
+
+.mo-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.mo-btn--cyan {
+  border-color: var(--mo-cyan);
+  background: linear-gradient(180deg, rgba(0,229,255,0.18), rgba(0,229,255,0.05));
+  box-shadow:
+    inset 0 0 0 1px rgba(0,229,255,0.4),
+    0 0 18px rgba(0,229,255,0.4),
+    var(--mo-shadow-card);
+}
+
+.mo-btn--cyan:hover {
+  box-shadow:
+    inset 0 0 0 1px rgba(0,229,255,0.6),
+    0 0 28px rgba(0,229,255,0.6),
+    var(--mo-shadow-card);
+}
+
+.mo-btn--gold {
+  border-color: var(--mo-gold);
+  color: var(--mo-gold);
+  background: linear-gradient(180deg, rgba(255,214,10,0.14), rgba(255,214,10,0.03));
+  box-shadow:
+    inset 0 0 0 1px rgba(255,214,10,0.4),
+    0 0 18px rgba(255,214,10,0.5);
+}
+
+.mo-btn--gold:hover {
+  box-shadow:
+    inset 0 0 0 1px rgba(255,214,10,0.6),
+    0 0 28px rgba(255,214,10,0.7);
+}
+
+.mo-btn--ghost {
+  border-color: var(--mo-line);
+  background: transparent;
+  color: var(--mo-ink-dim);
+  box-shadow: none;
+}
+
+.mo-btn--ghost:hover {
+  background: rgba(255,255,255,0.06);
+  box-shadow: none;
 }
 
 /* --- Input ---------------------------------------------- */
 .mo-input {
   display: block;
   width: 100%;
-  padding: var(--mo-sp-3) var(--mo-sp-4);
-  border-radius: var(--mo-r-md);
-  border: 2px solid var(--mo-cyan);
-  background: var(--mo-bg-2);
+  padding: 16px 18px;
+  font-family: var(--mo-font-display);
+  font-size: 18px;
   color: var(--mo-ink);
-  font-family: inherit;
-  font-size: 1rem;
-  transition: all 0.2s ease;
+  background: rgba(0,229,255,0.06);
+  border: 2px solid var(--mo-cyan);
+  border-radius: var(--mo-r-md);
+  outline: none;
+  transition: box-shadow var(--mo-dur-fast) var(--mo-ease);
 }
 
 .mo-input:focus {
-  outline: none;
-  border-color: var(--mo-cyan);
-  box-shadow: var(--mo-glow-cyan);
+  box-shadow: 0 0 0 4px rgba(0,229,255,0.15), 0 0 24px rgba(0,229,255,0.25);
 }
 
 .mo-input--magenta {
+  background: rgba(255,45,149,0.06);
   border-color: var(--mo-magenta);
 }
 
 .mo-input--magenta:focus {
-  border-color: var(--mo-magenta);
-  box-shadow: var(--mo-glow-magenta);
+  box-shadow: 0 0 0 4px rgba(255,45,149,0.15), 0 0 24px rgba(255,45,149,0.25);
 }
 
 /* --- Panel (glass card) -------------------------------- */
 .mo-panel {
-  border-radius: var(--mo-r-lg);
-  background: rgba(20, 6, 52, 0.4);
+  background: rgba(20,6,52,0.6);
+  border: 1px solid var(--mo-line);
   backdrop-filter: blur(12px);
-  border: 1px solid var(--mo-line-strong);
-  padding: var(--mo-sp-5);
-}
-
-/* --- Eyebrow (mono label) ------------------------------- */
-.mo-eyebrow {
-  font-family: var(--mo-font-mono);
-  font-size: 0.75rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.2em;
-  color: var(--mo-ink-dim);
+  -webkit-backdrop-filter: blur(12px);
+  border-radius: var(--mo-r-lg);
 }
 
 /* --- Equalizer (animated bars) ------------------------- */
 .mo-eq {
-  display: flex;
+  display: inline-flex;
   align-items: flex-end;
-  justify-content: center;
-  gap: 6px;
-  height: 40px;
+  gap: 3px;
+  height: 36px;
 }
 
-.mo-eq i {
+.mo-eq > i {
   display: block;
-  width: 4px;
-  background: var(--mo-magenta);
+  width: 5px;
+  background: linear-gradient(180deg, var(--mo-cyan), var(--mo-magenta));
   border-radius: 2px;
-  box-shadow: var(--mo-glow-magenta);
-  animation: mo-eq 0.6s ease-in-out infinite;
+  box-shadow: 0 0 8px var(--mo-magenta);
+  transform-origin: bottom;
+  animation: mo-eq-bar 1.1s ease-in-out infinite;
 }
 
-.mo-eq i:nth-child(1) { animation-delay: 0.0s; height: 20%; }
-.mo-eq i:nth-child(2) { animation-delay: 0.1s; height: 40%; }
-.mo-eq i:nth-child(3) { animation-delay: 0.2s; height: 60%; }
-.mo-eq i:nth-child(4) { animation-delay: 0.3s; height: 80%; }
-.mo-eq i:nth-child(5) { animation-delay: 0.4s; height: 100%; }
-.mo-eq i:nth-child(6) { animation-delay: 0.3s; height: 80%; }
-.mo-eq i:nth-child(7) { animation-delay: 0.2s; height: 60%; }
-.mo-eq i:nth-child(8) { animation-delay: 0.1s; height: 40%; }
-.mo-eq i:nth-child(9) { animation-delay: 0.0s; height: 20%; }
+.mo-eq > i:nth-child(1) { animation-delay: -0.10s; height: 65%; }
+.mo-eq > i:nth-child(2) { animation-delay: -0.30s; height: 95%; }
+.mo-eq > i:nth-child(3) { animation-delay: -0.70s; height: 50%; }
+.mo-eq > i:nth-child(4) { animation-delay: -0.20s; height: 80%; }
+.mo-eq > i:nth-child(5) { animation-delay: -0.50s; height: 100%; }
+.mo-eq > i:nth-child(6) { animation-delay: -0.40s; height: 60%; }
+.mo-eq > i:nth-child(7) { animation-delay: -0.60s; height: 85%; }
+.mo-eq > i:nth-child(8) { animation-delay: -0.05s; height: 40%; }
+.mo-eq > i:nth-child(9) { animation-delay: -0.80s; height: 70%; }
 
 /* --- Decorative layers --------------------------------- */
 .mo-stars {
   position: absolute;
   inset: 0;
-  background-image:
-    radial-gradient(1px 1px at 20px 30px, #eee, rgba(0,0,0,0)),
-    radial-gradient(1px 1px at 60px 70px, #fff, rgba(0,0,0,0)),
-    radial-gradient(1px 1px at 50px 50px, #ddd, rgba(0,0,0,0)),
-    radial-gradient(1px 1px at 130px 80px, #fff, rgba(0,0,0,0)),
-    radial-gradient(1px 1px at 90px 10px, #eee, rgba(0,0,0,0));
-  background-repeat: repeat;
-  background-size: 200px 200px;
-  opacity: 0.4;
   pointer-events: none;
+  opacity: 0.7;
+  background-image:
+    radial-gradient(1px 1px at 20% 15%, white, transparent),
+    radial-gradient(1px 1px at 80% 25%, white, transparent),
+    radial-gradient(1px 1px at 45% 8%,  white, transparent),
+    radial-gradient(2px 2px at 65% 12%, var(--mo-cyan),    transparent),
+    radial-gradient(1px 1px at 12% 35%, white, transparent),
+    radial-gradient(1.5px 1.5px at 90% 6%, var(--mo-magenta), transparent);
 }
 
 .mo-grid-floor {
   position: absolute;
-  inset: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 45%;
   background-image:
-    linear-gradient(0deg, var(--mo-line) 1px, transparent 1px),
-    linear-gradient(90deg, var(--mo-line) 1px, transparent 1px);
-  background-size: 40px 40px;
-  opacity: 0.15;
+    linear-gradient(transparent 0%, rgba(255,45,149,0.4) 100%),
+    repeating-linear-gradient(90deg, rgba(0,229,255,0.25)  0, rgba(0,229,255,0.25)  1px, transparent 1px, transparent 80px),
+    repeating-linear-gradient(0deg,  rgba(255,45,149,0.18) 0, rgba(255,45,149,0.18) 1px, transparent 1px, transparent 60px);
+  transform: perspective(400px) rotateX(60deg);
+  transform-origin: 50% 0%;
+  mask-image: linear-gradient(180deg, transparent 0%, black 30%, black 100%);
   pointer-events: none;
-  transform: perspective(1200px) rotateX(60deg) translateZ(-100px);
+  opacity: 0.6;
 }
 
 /* --- Animations --------------------------------------- */
 @keyframes mo-pulse {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+  50%       { opacity: 0.5; }
 }
 
-@keyframes mo-eq {
-  0%, 100% { height: 20%; }
-  50% { height: 100%; }
+@keyframes mo-eq-bar {
+  0%, 100% { transform: scaleY(0.3); }
+  50%      { transform: scaleY(1); }
 }
 
 @keyframes mo-rotate {
   from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  to   { transform: rotate(360deg); }
+}
+
+@keyframes mo-bob {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-6px); }
+}
+
+@keyframes mo-neon-pulse {
+  0%, 100% { opacity: 1;    filter: drop-shadow(0 0 8px currentColor) drop-shadow(0 0 24px currentColor); }
+  50%      { opacity: 0.85; filter: drop-shadow(0 0 4px currentColor) drop-shadow(0 0 12px currentColor); }
 }
 
 @keyframes mo-glow-pulse {
   0%, 100% { box-shadow: var(--mo-glow-magenta); }
-  50% { box-shadow: 0 0 40px rgba(255, 45, 149, 0.3); }
+  50%      { box-shadow: 0 0 40px rgba(255,45,149,0.3); }
 }
 
 @keyframes mo-float {
   0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-10px); }
+  50%      { transform: translateY(-10px); }
 }
 
-/* --- Neon text effect ---------------------------------- */
-.mo-neon {
-  color: var(--mo-magenta);
-  text-shadow:
-    0 0 10px var(--mo-magenta),
-    0 0 20px var(--mo-magenta),
-    0 0 30px var(--mo-magenta);
-}
-
-.mo-neon--cyan {
-  color: var(--mo-cyan);
-  text-shadow:
-    0 0 10px var(--mo-cyan),
-    0 0 20px var(--mo-cyan),
-    0 0 30px var(--mo-cyan);
-}
-
-.mo-neon--gold {
-  color: var(--mo-gold);
-  text-shadow:
-    0 0 10px var(--mo-gold),
-    0 0 20px var(--mo-gold),
-    0 0 30px var(--mo-gold);
+/* --- Accessibility --------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .mo-eq > i,
+  .mo-app *[style*='animation'] { animation: none !important; }
 }
