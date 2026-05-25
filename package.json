@@ -18,7 +18,7 @@
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.1",
     "concurrently": "^9.0.0",
-    "peer": "^9.0.1",
+    "peer": "^1.0.2",
     "vite": "^5.4.8"
   }
 }
