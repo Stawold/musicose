@@ -23,10 +23,27 @@ const levenshtein = (a, b) => {
   return matrix[b.length][a.length];
 };
 
+const normalize = (s) => {
+  if (!s) return '';
+  return s
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[(\[{][^)\]{}]*[)\]{}]/g, ' ')
+    .replace(/[-''''.]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/^(the|les|le|la|l|un|une|a|an|des)\s+/i, '')
+    .trim();
+};
+
 const isCorrect = (answer, correct) => {
   if (!answer || !correct) return false;
-  const dist = levenshtein(answer.trim().toLowerCase(), correct.trim().toLowerCase());
-  const maxDist = Math.max(1, Math.floor(correct.length * 0.15));
+  const a = normalize(answer);
+  const c = normalize(correct);
+  const dist = levenshtein(a, c);
+  const maxDist = Math.max(1, Math.floor(c.length * 0.15));
   return dist <= maxDist;
 };
 
@@ -323,7 +340,7 @@ export default function Host() {
 
             resp.points = points;
             setResponses(prev => [...prev, { ...resp, playerId: sessionId }]);
-            conn.send({ type: "revealAnswer", title: correctTitle, artist: correctArtist, points });
+            conn.send({ type: "responseAck", points });
           }
         } catch (e) {
           console.error("Erreur traitement data :", e);
@@ -387,6 +404,14 @@ export default function Host() {
     if (!playlist) return;
     if (currentSongIndex < playlist.songs.length - 1) {
       if (isEndOfRound(currentSongIndex)) sendRankingToPlayers();
+
+      const songToReveal = playlist.songs[currentSongIndex];
+      if (songToReveal) {
+        connections.forEach(c => {
+          try { c.send({ type: "revealAnswer", title: songToReveal.title, artist: songToReveal.artist }); } catch (e) {}
+        });
+      }
+
       const newSongIndex = currentSongIndex + 1;
       let newRound = currentRound;
       if (newSongIndex === 30) newRound = 2;

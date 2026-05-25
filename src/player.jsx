@@ -23,10 +23,27 @@ const levenshtein = (a, b) => {
   return matrix[b.length][a.length];
 };
 
+const normalize = (s) => {
+  if (!s) return '';
+  return s
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[(\[{][^)\]{}]*[)\]{}]/g, ' ')
+    .replace(/[-''''.]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/^(the|les|le|la|l|un|une|a|an|des)\s+/i, '')
+    .trim();
+};
+
 const isCorrect = (answer, correct) => {
   if (!answer || !correct) return false;
-  const dist = levenshtein(answer.trim().toLowerCase(), correct.trim().toLowerCase());
-  const maxDist = Math.max(1, Math.floor(correct.length * 0.15));
+  const a = normalize(answer);
+  const c = normalize(correct);
+  const dist = levenshtein(a, c);
+  const maxDist = Math.max(1, Math.floor(c.length * 0.15));
   return dist <= maxDist;
 };
 
@@ -161,6 +178,10 @@ export default function Player() {
             setCurrentSongIndex(typeof data.songIndex === "number" ? data.songIndex : null);
             if (typeof data.round === "number") setCurrentRound(data.round);
             setRoundStartTime(Date.now());
+          } else if (data.type === "responseAck") {
+            if (typeof data.points === "number") {
+              setTotalScore(prev => prev + data.points);
+            }
           } else if (data.type === "sessionRestored") {
             setRestoredScore(data.totalScore);
             setTotalScore(data.totalScore || 0);
@@ -169,9 +190,6 @@ export default function Player() {
           } else if (data.type === "revealAnswer") {
             setCorrectAnswer({ title: data.title || "", artist: data.artist || "" });
             setCanPlay(false);
-            if (typeof data.points === "number") {
-              setTotalScore(prev => prev + data.points);
-            }
           } else if (data.type === "showRanking") {
             setRankingData(data.ranking || []);
             setShowRanking(true);
@@ -398,7 +416,7 @@ export default function Player() {
   }
 
   // ── JOINED — WAITING ROOM ─────────────────────────────────
-  if (joinStep === "joined" && !canPlay && !correctAnswer && !showRanking) {
+  if (joinStep === "joined" && !canPlay && !correctAnswer && !showRanking && submittedAnswer === null) {
     return (
       <div className="mo-app" style={{
         minHeight: '100vh', display: 'flex', flexDirection: 'column',
@@ -471,6 +489,67 @@ export default function Player() {
             <div style={{ fontSize: 12, color: 'var(--mo-ink-dim)', marginTop: 4 }}>
               Mets le son. Plus tu réponds vite, plus tu marques.
             </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── JOINED — WAITING FOR REVEAL (submitted, host hasn't advanced yet) ─────────
+  if (joinStep === "joined" && submittedAnswer !== null && !correctAnswer && !canPlay && !showRanking) {
+    return (
+      <div className="mo-app" style={{ minHeight: '100vh', position: 'relative', overflow: 'hidden' }}>
+        <Stars />
+        <div style={{
+          position: 'absolute', top: '30%', left: '50%', transform: 'translate(-50%,-50%)',
+          width: 300, height: 300, pointerEvents: 'none',
+          background: 'radial-gradient(circle, rgba(0,229,255,0.18), transparent 60%)',
+        }} />
+
+        <div style={{ position: 'absolute', top: 20, left: 18, right: 18, display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 2 }}>
+          <Chip live>RÉPONSE ENVOYÉE</Chip>
+          <div style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 9, letterSpacing: '0.2em', color: 'var(--mo-ink-dim)' }}>{pseudo}</div>
+        </div>
+
+        <div style={{ position: 'relative', zIndex: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', gap: 20, padding: '80px 24px 24px', textAlign: 'center' }}>
+          <div style={{ position: 'relative', width: 96, height: 96 }}>
+            <div style={{
+              position: 'absolute', inset: 0, borderRadius: '50%',
+              border: '3px solid transparent',
+              borderTopColor: 'var(--mo-cyan)',
+              borderRightColor: 'var(--mo-magenta)',
+              animation: 'mo-rotate 1.2s linear infinite',
+            }} />
+            <div style={{
+              position: 'absolute', inset: 12, borderRadius: '50%',
+              background: 'var(--mo-bg-0)', border: '1px solid var(--mo-line)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <Eq count={4} />
+            </div>
+          </div>
+
+          <div className="mo-display mo-neon" style={{ fontSize: 34, color: 'var(--mo-cyan)', lineHeight: 0.95 }}>
+            RÉPONSE<br/>ENVOYÉE
+          </div>
+          <div style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 10, color: 'var(--mo-ink-dim)', letterSpacing: '0.2em' }}>
+            EN ATTENTE DE LA RÉVÉLATION…
+          </div>
+
+          {(submittedAnswer.title || submittedAnswer.artist) && (
+            <Panel style={{ padding: 16, width: '100%' }}>
+              <div style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 9, letterSpacing: '0.2em', color: 'var(--mo-ink-dim)', marginBottom: 8 }}>TA RÉPONSE</div>
+              {submittedAnswer.title && (
+                <div style={{ fontFamily: 'var(--mo-font-display)', fontSize: 16, color: 'var(--mo-ink)' }}>{submittedAnswer.title}</div>
+              )}
+              {submittedAnswer.artist && currentRound !== 2 && (
+                <div style={{ fontFamily: 'var(--mo-font-display)', fontSize: 13, color: 'var(--mo-ink-dim)', marginTop: 4 }}>{submittedAnswer.artist}</div>
+              )}
+            </Panel>
+          )}
+
+          <div style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 9, color: 'var(--mo-ink-faint)', letterSpacing: '0.15em' }}>
+            L'HÔTE VA RÉVÉLER LA RÉPONSE
           </div>
         </div>
       </div>
