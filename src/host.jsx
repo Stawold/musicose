@@ -52,12 +52,20 @@ export default function Host() {
   const playlistRef = useRef(playlist);
   const currentSongIndexRef = useRef(currentSongIndex);
   const currentRoundRef = useRef(currentRound);
+  // Toujours à jour pour les closures PeerJS
+  const playersRef = useRef({});
+  const shortCodeRef = useRef(null);
+  // Mapping peerId → sessionId
+  const peerToSession = useRef({});
 
   useEffect(() => { playlistRef.current = playlist; }, [playlist]);
   useEffect(() => { currentSongIndexRef.current = currentSongIndex; }, [currentSongIndex]);
   useEffect(() => { currentRoundRef.current = currentRound; }, [currentRound]);
+  useEffect(() => { playersRef.current = players; }, [players]);
+  useEffect(() => { shortCodeRef.current = shortCode; }, [shortCode]);
 
   const HOST_PASSWORD = "melbose";
+  const KVDB_BASE = "https://kvdb.io/GVkYCf2Kfn44jq3EYGweRj/";
 
   // Vérification mot de passe
   const handleAuthSubmit = () => {
@@ -69,9 +77,47 @@ export default function Host() {
     }
   };
 
+  // ====== KVDB ======
+  const sendShortCodeToKvdb = async (sc, hId) => {
+    try {
+      const res = await fetch(`${KVDB_BASE}${encodeURIComponent(sc)}`, {
+        method: "PUT",
+        body: hId,
+      });
+      if (!res.ok) console.warn("Erreur écriture kvdb", res.status);
+    } catch (e) {
+      console.error("Erreur kvdb PUT", e);
+    }
+  };
+
+  const saveScoreToKvdb = async (sessionId, scoreData) => {
+    const sc = shortCodeRef.current;
+    if (!sc) return;
+    try {
+      await fetch(`${KVDB_BASE}score-${sc}-${sessionId}`, {
+        method: "PUT",
+        body: JSON.stringify(scoreData),
+      });
+    } catch (e) {
+      console.warn("Erreur sauvegarde score kvdb:", e);
+    }
+  };
+
+  const fetchScoreFromKvdb = async (sessionId) => {
+    const sc = shortCodeRef.current;
+    if (!sc) return null;
+    try {
+      const res = await fetch(`${KVDB_BASE}score-${sc}-${sessionId}`);
+      if (!res.ok) return null;
+      return JSON.parse(await res.text());
+    } catch (e) {
+      return null;
+    }
+  };
+
   // Envoi classement (manches)
   const sendRankingToPlayers = () => {
-    const ranking = Object.values(players)
+    const ranking = Object.values(playersRef.current)
       .sort((a, b) => (b.totalScore || 0) - (a.totalScore || 0))
       .map(p => ({ pseudo: p.pseudo, score: p.totalScore }));
     connections.forEach(conn => {
@@ -81,21 +127,6 @@ export default function Host() {
 
   const isEndOfRound = (songIndex) => {
     return [29, 39, 69, 84].includes(songIndex);
-  };
-
-  // ====== KVDB (stockage serveur) ======
-  const KVDB_BASE = "https://kvdb.io/GVkYCf2Kfn44jq3EYGweRj/";
-
-  const sendShortCodeToKvdb = async (shortCode, hostId) => {
-    try {
-      const res = await fetch(`${KVDB_BASE}${encodeURIComponent(shortCode)}`, {
-        method: "PUT",
-        body: hostId,
-      });
-      if (!res.ok) console.warn("Erreur écriture kvdb", res.status);
-    } catch (e) {
-      console.error("Erreur kvdb PUT", e);
-    }
   };
 
   // Charger playlist
@@ -110,14 +141,12 @@ export default function Host() {
       .catch(err => console.error("Erreur chargement playlist :", err));
   }, [selectedPlaylist]);
 
-  // Helper: préparer classement trié
   const buildRanking = () => {
-    return Object.values(players)
+    return Object.values(playersRef.current)
       .sort((a, b) => (b.totalScore || 0) - (a.totalScore || 0))
       .map(p => ({ pseudo: p.pseudo, score: p.totalScore }));
   };
 
-  // Fonction pour envoyer classement final
   const sendFinalRanking = () => {
     const ranking = buildRanking();
     connections.forEach(conn => {
@@ -147,24 +176,73 @@ export default function Host() {
 
     newPeer.on("connection", (conn) => {
       setConnections(prev => [...prev, conn]);
+
+      conn.on("close", () => {
+        setConnections(prev => prev.filter(c => c !== conn));
+        // On garde peerToSession en mémoire pour un éventuel rejoin
+      });
+
       conn.on("open", () => conn.send({ type: "welcome", message: "Bienvenue sur Music'Ose !" }));
 
       conn.on("data", (data) => {
         try {
           if (data.type === "newPlayer") {
-            setPlayers(prev => ({
-              ...prev,
-              [conn.peer]: {
-                pseudo: data.pseudo,
-                scorePerRound: [0, 0, 0, 0],
-                totalScore: 0,
-                activeRound4: true
-              }
-            }));
+            const sessionId = data.sessionId || conn.peer;
+            peerToSession.current[conn.peer] = sessionId;
+
+            const existingPlayer = playersRef.current[sessionId];
+
+            if (existingPlayer) {
+              // Rejoin : mise à jour du peerId, scores conservés
+              setPlayers(prev => ({
+                ...prev,
+                [sessionId]: { ...prev[sessionId], peerId: conn.peer },
+              }));
+              conn.send({
+                type: "sessionRestored",
+                totalScore: existingPlayer.totalScore,
+                round: currentRoundRef.current,
+              });
+            } else {
+              // Nouveau joueur ou host redémarré : tente une récupération KVDB
+              fetchScoreFromKvdb(sessionId).then(savedScore => {
+                if (savedScore) {
+                  setPlayers(prev => ({
+                    ...prev,
+                    [sessionId]: {
+                      pseudo: savedScore.pseudo || data.pseudo,
+                      scorePerRound: savedScore.scorePerRound || [0, 0, 0, 0],
+                      totalScore: savedScore.totalScore || 0,
+                      activeRound4: true,
+                      peerId: conn.peer,
+                    },
+                  }));
+                  conn.send({
+                    type: "sessionRestored",
+                    totalScore: savedScore.totalScore,
+                    round: currentRoundRef.current,
+                  });
+                } else {
+                  setPlayers(prev => ({
+                    ...prev,
+                    [sessionId]: {
+                      pseudo: data.pseudo,
+                      scorePerRound: [0, 0, 0, 0],
+                      totalScore: 0,
+                      activeRound4: true,
+                      peerId: conn.peer,
+                    },
+                  }));
+                }
+              });
+            }
             return;
           }
 
           if (data.type === "playerResponse") {
+            const sessionId = peerToSession.current[conn.peer];
+            if (!sessionId) return;
+
             const pl = playlistRef.current;
             const idx = currentSongIndexRef.current;
             const round = currentRoundRef.current;
@@ -179,7 +257,7 @@ export default function Host() {
             const correctTitle = song.title;
             const correctArtist = song.artist;
             let points = 0;
-            const round4Active = players[conn.peer]?.activeRound4 ?? true;
+            const round4Active = playersRef.current[sessionId]?.activeRound4 ?? true;
             const responseTime = resp.responseTime ? parseFloat(resp.responseTime) : null;
             resp.responseTime = responseTime;
 
@@ -191,8 +269,8 @@ export default function Host() {
                   setFastest(prev => {
                     if (!prev || responseTime < prev.time) {
                       points += 1;
-                      setBonusWinnerId(conn.peer);
-                      return { playerId: conn.peer, time: responseTime };
+                      setBonusWinnerId(sessionId);
+                      return { playerId: sessionId, time: responseTime };
                     }
                     return prev;
                   });
@@ -215,18 +293,35 @@ export default function Host() {
             }
 
             if (points > 0) {
-              setPlayers(prev => {
-                const updated = { ...prev };
-                if (updated[conn.peer]) {
-                  updated[conn.peer].scorePerRound[round - 1] += points;
-                  updated[conn.peer].totalScore += points;
-                }
-                return updated;
-              });
+              const currentPlayer = playersRef.current[sessionId];
+              if (currentPlayer) {
+                const newScorePerRound = [...currentPlayer.scorePerRound];
+                newScorePerRound[round - 1] = (newScorePerRound[round - 1] || 0) + points;
+                const newTotalScore = (currentPlayer.totalScore || 0) + points;
+
+                setPlayers(prev => {
+                  const updated = { ...prev };
+                  if (updated[sessionId]) {
+                    updated[sessionId] = {
+                      ...updated[sessionId],
+                      scorePerRound: newScorePerRound,
+                      totalScore: newTotalScore,
+                    };
+                  }
+                  return updated;
+                });
+
+                // Sauvegarde KVDB après chaque point marqué
+                saveScoreToKvdb(sessionId, {
+                  pseudo: currentPlayer.pseudo,
+                  scorePerRound: newScorePerRound,
+                  totalScore: newTotalScore,
+                });
+              }
             }
 
             resp.points = points;
-            setResponses(prev => [...prev, { ...resp, playerId: conn.peer }]);
+            setResponses(prev => [...prev, { ...resp, playerId: sessionId }]);
             conn.send({ type: "revealAnswer", title: correctTitle, artist: correctArtist });
           }
         } catch (e) {
@@ -518,9 +613,7 @@ export default function Host() {
                   <tr key={i} style={{ borderBottom: "1px solid var(--mo-line)" }}>
                     <td style={{ padding: "0.5rem", fontWeight: "bold" }}>{p.pseudo}</td>
                     {p.scorePerRound.map((s, idx) => (
-                      <td key={idx} style={{ padding: "0.5rem" }}>
-                        {s}
-                      </td>
+                      <td key={idx} style={{ padding: "0.5rem" }}>{s}</td>
                     ))}
                     <td style={{ padding: "0.5rem", color: "var(--mo-gold)", fontWeight: "bold" }}>
                       {p.totalScore}

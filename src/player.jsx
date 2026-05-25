@@ -31,10 +31,16 @@ const isCorrect = (answer, correct) => {
 
 const roundNames = ["Chansons en rafale", "Le Focus", "Fast and Musicous", "Le battle Royal d'Ose"];
 
+const generateSessionId = () => {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
+  return "sid-" + Date.now() + "-" + Math.random().toString(36).slice(2);
+};
+
 export default function Player() {
   const [joinStep, setJoinStep] = useState("pseudo"); // "pseudo" | "code" | "joined"
   const [pseudoInput, setPseudoInput] = useState("");
   const [codeInput, setCodeInput] = useState("");
+  const [sessionId, setSessionId] = useState("");
 
   const [title, setTitle] = useState("");
   const [artist, setArtist] = useState("");
@@ -50,8 +56,28 @@ export default function Player() {
   const [correctAnswer, setCorrectAnswer] = useState(null);
   const [showRanking, setShowRanking] = useState(false);
   const [rankingData, setRankingData] = useState([]);
+  const [restoredScore, setRestoredScore] = useState(null);
 
   const KVDB_BASE = "https://kvdb.io/GVkYCf2Kfn44jq3EYGweRj/";
+
+  // Restaure la session depuis localStorage au démarrage
+  useEffect(() => {
+    const saved = localStorage.getItem("musicose_session");
+    if (saved) {
+      try {
+        const data = JSON.parse(saved);
+        if (data.sessionId) setSessionId(data.sessionId);
+        if (data.pseudo) {
+          setPseudoInput(data.pseudo);
+          setPseudo(data.pseudo);
+          setJoinStep("code");
+        }
+        if (data.gameCode) setCodeInput(data.gameCode);
+      } catch (e) {
+        localStorage.removeItem("musicose_session");
+      }
+    }
+  }, []);
 
   const resolveShortCode = async (shortCode) => {
     try {
@@ -66,28 +92,36 @@ export default function Player() {
 
   const handleJoinGame = async () => {
     if (joinStep === "pseudo") {
-      if (!pseudoInput.trim()) {
-        alert("Entre un pseudo !");
-        return;
-      }
-      setPseudo(pseudoInput);
+      if (!pseudoInput.trim()) { alert("Entre un pseudo !"); return; }
+      const sid = sessionId || generateSessionId();
+      setSessionId(sid);
+      setPseudo(pseudoInput.trim());
       setJoinStep("code");
       return;
     }
 
     if (joinStep === "code") {
-      if (!codeInput.trim()) {
-        alert("Entre un code !");
-        return;
-      }
+      if (!codeInput.trim()) { alert("Entre un code !"); return; }
+
+      // Capture les valeurs finales avant l'async
+      const finalSessionId = sessionId || generateSessionId();
+      const finalPseudo = pseudo || pseudoInput.trim();
+      const finalCode = codeInput.trim();
+
+      // Persiste la session dès maintenant
+      localStorage.setItem("musicose_session", JSON.stringify({
+        sessionId: finalSessionId,
+        pseudo: finalPseudo,
+        gameCode: finalCode.toUpperCase(),
+      }));
 
       const newPeer = new Peer();
       setPeer(newPeer);
 
       newPeer.on("open", async () => {
-        let realHostId = codeInput.trim();
-        if (codeInput.toUpperCase().startsWith("OSE-")) {
-          const resolved = await resolveShortCode(codeInput.toUpperCase());
+        let realHostId = finalCode;
+        if (finalCode.toUpperCase().startsWith("OSE-")) {
+          const resolved = await resolveShortCode(finalCode.toUpperCase());
           if (!resolved) {
             alert("❌ Code introuvable. Vérifie le code ou demande à l'hôte.");
             return;
@@ -99,7 +133,7 @@ export default function Player() {
         setConn(connection);
 
         connection.on("open", () => {
-          connection.send({ type: "newPlayer", pseudo: pseudoInput });
+          connection.send({ type: "newPlayer", pseudo: finalPseudo, sessionId: finalSessionId });
           setJoinStep("joined");
         });
 
@@ -111,6 +145,8 @@ export default function Player() {
             setCurrentSongIndex(typeof data.songIndex === "number" ? data.songIndex : null);
             if (typeof data.round === "number") setCurrentRound(data.round);
             setRoundStartTime(Date.now());
+          } else if (data.type === "sessionRestored") {
+            setRestoredScore(data.totalScore);
           } else if (data.type === "eliminatedRound4") {
             setActiveRound4(false);
           } else if (data.type === "revealAnswer") {
@@ -216,10 +252,17 @@ export default function Player() {
 
           {joinStep === "code" && (
             <>
-              <Eyebrow>Étape 2</Eyebrow>
-              <p style={{ marginTop: "1rem", marginBottom: "1.5rem", color: "var(--mo-ink-dim)" }}>
+              <Eyebrow>
+                {sessionId ? "Reprendre la partie" : "Étape 2"}
+              </Eyebrow>
+              <p style={{ marginTop: "1rem", marginBottom: "0.5rem", color: "var(--mo-ink-dim)" }}>
                 Code de la partie (OSE-XXXX ou ID complet)
               </p>
+              {sessionId && (
+                <p style={{ fontSize: "0.8rem", color: "var(--mo-cyan)", marginBottom: "1rem" }}>
+                  Session sauvegardée — tu retrouveras tes points
+                </p>
+              )}
               <Input
                 color="cyan"
                 type="text"
@@ -234,6 +277,27 @@ export default function Player() {
               <Btn variant="cyan" onClick={handleJoinGame} style={{ width: "100%" }}>
                 Rejoindre
               </Btn>
+              <button
+                onClick={() => {
+                  localStorage.removeItem("musicose_session");
+                  setSessionId("");
+                  setPseudo("");
+                  setPseudoInput("");
+                  setCodeInput("");
+                  setJoinStep("pseudo");
+                }}
+                style={{
+                  marginTop: "1rem",
+                  background: "none",
+                  border: "none",
+                  color: "var(--mo-ink-faint)",
+                  fontSize: "0.8rem",
+                  cursor: "pointer",
+                  textDecoration: "underline",
+                }}
+              >
+                Changer de joueur
+              </button>
             </>
           )}
         </Panel>
@@ -273,6 +337,12 @@ export default function Player() {
       >
         {pseudo}
       </h2>
+
+      {restoredScore !== null && (
+        <p style={{ fontSize: "0.85rem", color: "var(--mo-cyan)", marginBottom: "0.5rem" }}>
+          Session restaurée — {restoredScore} pts récupérés
+        </p>
+      )}
 
       <h3
         style={{
