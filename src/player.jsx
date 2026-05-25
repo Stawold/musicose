@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Peer } from "peerjs";
 import { Btn, Input, Panel, Eyebrow } from "./components/MoUI";
+import { peerConfig } from "./peerConfig";
 import "./styles/tokens.css";
 
 // Distance de Levenshtein
@@ -115,7 +116,7 @@ export default function Player() {
         gameCode: finalCode.toUpperCase(),
       }));
 
-      const newPeer = new Peer();
+      const newPeer = new Peer(undefined, peerConfig);
       setPeer(newPeer);
 
       newPeer.on("open", async () => {

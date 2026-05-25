@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Peer } from "peerjs";
 import { Btn, Panel, Chip, Eq, Eyebrow } from "./components/MoUI";
+import { peerConfig } from "./peerConfig";
 import "./styles/tokens.css";
 
 // Distance de Levenshtein
@@ -160,7 +161,7 @@ export default function Host() {
   useEffect(() => {
     if (!authenticated) return;
 
-    const newPeer = new Peer();
+    const newPeer = new Peer(undefined, peerConfig);
     setPeer(newPeer);
     setPeerStatus("connecting");
 

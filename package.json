@@ -4,7 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "concurrently \"node peer-server.cjs\" \"vite --host\"",
+    "dev:vite": "vite --host",
+    "server": "node peer-server.cjs",
     "build": "vite build",
     "preview": "vite preview"
   },
@@ -15,6 +17,8 @@
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.1",
+    "concurrently": "^9.0.0",
+    "peer": "^9.0.1",
     "vite": "^5.4.8"
   }
 }
