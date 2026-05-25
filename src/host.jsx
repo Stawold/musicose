@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Peer } from "peerjs";
-import { Btn, Panel, Chip, Eq, Eyebrow } from "./components/MoUI";
+import { Btn, Panel, Chip, Eq, Eyebrow, Stars, Vinyl, Waveform } from "./components/MoUI";
 import { peerConfig } from "./peerConfig";
 import "./styles/tokens.css";
 
@@ -47,17 +47,16 @@ export default function Host() {
   const [currentRound, setCurrentRound] = useState(1);
   const [bonusWinnerId, setBonusWinnerId] = useState(null);
   const [shortCode, setShortCode] = useState(null);
-  const [peerStatus, setPeerStatus] = useState("idle"); // "idle" | "connecting" | "ready" | "error"
+  const [peerStatus, setPeerStatus] = useState("idle");
+  const [totalSeconds, setTotalSeconds] = useState(0);
 
   const bonusOrderRef = useRef({});
   const audioRef = useRef(null);
   const playlistRef = useRef(playlist);
   const currentSongIndexRef = useRef(currentSongIndex);
   const currentRoundRef = useRef(currentRound);
-  // Toujours à jour pour les closures PeerJS
   const playersRef = useRef({});
   const shortCodeRef = useRef(null);
-  // Mapping peerId → sessionId
   const peerToSession = useRef({});
 
   useEffect(() => { playlistRef.current = playlist; }, [playlist]);
@@ -69,7 +68,6 @@ export default function Host() {
   const HOST_PASSWORD = "melbose";
   const KVDB_BASE = "https://kvdb.io/GVkYCf2Kfn44jq3EYGweRj/";
 
-  // Vérification mot de passe
   const handleAuthSubmit = () => {
     if (passwordInput === HOST_PASSWORD) {
       setAuthenticated(true);
@@ -79,7 +77,6 @@ export default function Host() {
     }
   };
 
-  // ====== KVDB ======
   const sendShortCodeToKvdb = async (sc, hId) => {
     try {
       const res = await fetch(`${KVDB_BASE}${encodeURIComponent(sc)}`, {
@@ -117,7 +114,6 @@ export default function Host() {
     }
   };
 
-  // Envoi classement (manches)
   const sendRankingToPlayers = () => {
     const ranking = Object.values(playersRef.current)
       .sort((a, b) => (b.totalScore || 0) - (a.totalScore || 0))
@@ -131,7 +127,6 @@ export default function Host() {
     return [29, 39, 69, 84].includes(songIndex);
   };
 
-  // Charger playlist
   useEffect(() => {
     fetch(`/playlists/${selectedPlaylist}/data.json`)
       .then(res => res.json())
@@ -157,7 +152,6 @@ export default function Host() {
     alert("Classement final envoyé aux joueurs !");
   };
 
-  // PeerJS
   useEffect(() => {
     if (!authenticated) return;
 
@@ -170,7 +164,7 @@ export default function Host() {
       try {
         const sc = "OSE-" + id.slice(-4).toUpperCase();
         setShortCode(sc);
-        shortCodeRef.current = sc; // Mise à jour immédiate sans attendre le useEffect
+        shortCodeRef.current = sc;
         setPeerStatus("ready");
         console.log("ShortCode généré :", sc);
         sendShortCodeToKvdb(sc, id);
@@ -189,7 +183,6 @@ export default function Host() {
 
       conn.on("close", () => {
         setConnections(prev => prev.filter(c => c !== conn));
-        // On garde peerToSession en mémoire pour un éventuel rejoin
       });
 
       conn.on("open", () => conn.send({ type: "welcome", message: "Bienvenue sur Music'Ose !" }));
@@ -203,7 +196,6 @@ export default function Host() {
             const existingPlayer = playersRef.current[sessionId];
 
             if (existingPlayer) {
-              // Rejoin : mise à jour du peerId, scores conservés
               setPlayers(prev => ({
                 ...prev,
                 [sessionId]: { ...prev[sessionId], peerId: conn.peer },
@@ -214,7 +206,6 @@ export default function Host() {
                 round: currentRoundRef.current,
               });
             } else {
-              // Nouveau joueur ou host redémarré : tente une récupération KVDB
               fetchScoreFromKvdb(sessionId).then(savedScore => {
                 if (savedScore) {
                   setPlayers(prev => ({
@@ -321,7 +312,6 @@ export default function Host() {
                   return updated;
                 });
 
-                // Sauvegarde KVDB après chaque point marqué
                 saveScoreToKvdb(sessionId, {
                   pseudo: currentPlayer.pseudo,
                   scorePerRound: newScorePerRound,
@@ -345,7 +335,6 @@ export default function Host() {
     };
   }, [authenticated]);
 
-  // Timer
   useEffect(() => {
     if (secondsLeft > 0 && isCounting) {
       const timer = setTimeout(() => setSecondsLeft(secondsLeft - 1), 1000);
@@ -368,6 +357,7 @@ export default function Host() {
     connections.forEach(conn =>
       conn.send({ type: "startTimer", seconds: duration, songIndex: currentSongIndex, round: currentRound })
     );
+    setTotalSeconds(duration);
     setSecondsLeft(duration);
     setIsCounting(true);
     setFastest(null);
@@ -412,236 +402,344 @@ export default function Host() {
 
   const currentSong = playlist && playlist.songs ? playlist.songs[currentSongIndex] : null;
 
-  // ÉCRAN DE CONNEXION (avant authentification)
+  // ── AUTH SCREEN ────────────────────────────────────────────
   if (!authenticated) {
     return (
-      <div
-        style={{
-          background: "linear-gradient(135deg, var(--mo-bg-0) 0%, var(--mo-bg-1) 100%)",
-          color: "var(--mo-ink)",
-          fontFamily: "var(--mo-font-display)",
-          minHeight: "100vh",
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "center",
-          alignItems: "center",
-          textAlign: "center",
-          padding: "2rem",
-          width: "100%",
-        }}
-      >
-        <h1 style={{ fontSize: "3rem", color: "var(--mo-cyan)", marginBottom: "2rem" }}>
-          Music'Ose
-        </h1>
-        <Panel style={{ maxWidth: "400px", width: "90%" }}>
-          <Eyebrow>Accès Hôte</Eyebrow>
-          <p style={{ marginTop: "1rem", marginBottom: "1.5rem", color: "var(--mo-ink-dim)" }}>
-            Entre le mot de passe pour accéder à la régie
-          </p>
-          <input
-            type="password"
-            value={passwordInput}
-            onChange={(e) => setPasswordInput(e.target.value)}
-            onKeyPress={(e) => e.key === "Enter" && handleAuthSubmit()}
-            placeholder="Mot de passe"
-            style={{
-              width: "100%",
-              padding: "0.8rem",
-              borderRadius: "8px",
-              border: "2px solid var(--mo-cyan)",
-              background: "var(--mo-bg-2)",
-              color: "var(--mo-ink)",
-              fontSize: "1rem",
-              marginBottom: "1rem",
-              fontFamily: "inherit",
-            }}
-          />
-          <Btn variant="cyan" onClick={handleAuthSubmit} style={{ width: "100%" }}>
-            Valider
-          </Btn>
-        </Panel>
+      <div className="mo-app" style={{
+        minHeight: '100vh', display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center', position: 'relative',
+      }}>
+        <Stars />
+        <div style={{ position: 'relative', zIndex: 1, textAlign: 'center', width: '100%', maxWidth: 400, padding: '0 20px' }}>
+          <div className="mo-display mo-neon" style={{ fontSize: 40, color: 'var(--mo-cyan)', marginBottom: 32 }}>
+            MUSIC<span style={{ color: 'var(--mo-gold)' }}>'</span>OSE
+          </div>
+          <Panel style={{ padding: 32 }}>
+            <Eyebrow style={{ color: 'var(--mo-cyan)' }}>Accès Hôte</Eyebrow>
+            <p style={{ marginTop: 12, marginBottom: 24, color: 'var(--mo-ink-dim)', fontSize: 14 }}>
+              Entre le mot de passe pour accéder à la régie
+            </p>
+            <input
+              type="password"
+              value={passwordInput}
+              onChange={(e) => setPasswordInput(e.target.value)}
+              onKeyPress={(e) => e.key === "Enter" && handleAuthSubmit()}
+              placeholder="Mot de passe"
+              className="mo-input mo-input--magenta"
+              style={{ marginBottom: 16, fontFamily: 'var(--mo-font-body)', fontSize: 16 }}
+            />
+            <Btn variant="cyan" onClick={handleAuthSubmit} style={{ width: '100%' }}>
+              Valider
+            </Btn>
+          </Panel>
+        </div>
       </div>
     );
   }
 
-  // ÉCRAN RÉGIE HÔTE (après authentification)
-  const containerStyle = {
-    background: "linear-gradient(135deg, var(--mo-bg-0) 0%, var(--mo-bg-1) 100%)",
-    color: "var(--mo-ink)",
-    fontFamily: "var(--mo-font-display)",
-    textAlign: "center",
-    minHeight: "100vh",
-    width: "100vw",
-    display: "flex",
-    flexDirection: "column",
-    justifyContent: "flex-start",
-    alignItems: "center",
-    paddingTop: "2rem",
-    overflowY: "auto",
-    position: "relative",
-  };
+  // ── RÉGIE HÔTE ────────────────────────────────────────────
+  const waveformProgress = totalSeconds > 0 ? 1 - (secondsLeft / totalSeconds) : 0;
 
-  const titleStyle = {
-    fontSize: "clamp(2rem, 4vw, 3rem)",
-    fontWeight: "900",
-    color: "var(--mo-cyan)",
-    textShadow: "0 0 20px var(--mo-cyan), 0 0 40px rgba(0, 229, 255, 0.3)",
-    marginBottom: "0.5rem",
-  };
-
-  const subtitleStyle = {
-    fontSize: "clamp(1rem, 2vw, 1.3rem)",
-    color: "var(--mo-ink-dim)",
-    marginBottom: "2rem",
+  const getResponsePalette = (r) => {
+    if (r.points === undefined) return { c: 'rgba(255,45,149,0.3)', label: 'EN ATTENTE' };
+    if (r.points === 0) return { c: 'rgba(255,255,255,0.15)', label: 'RATÉ' };
+    const titleOk = isCorrect(r.title || '', currentSong?.title || '');
+    const artistOk = isCorrect(r.artist || '', currentSong?.artist || '');
+    if (titleOk && artistOk) return { c: 'var(--mo-cyan)', label: 'PARFAIT' };
+    return { c: 'var(--mo-gold)', label: 'PARTIEL' };
   };
 
   return (
-    <div style={containerStyle}>
-      <div style={{ position: "relative", zIndex: 1, width: "100%", maxWidth: "1200px", paddingX: "2rem" }}>
-        <h1 style={titleStyle}>Music'Ose</h1>
-        <h2 style={subtitleStyle}>Régie Hôte</h2>
+    <div className="mo-app" style={{
+      display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden',
+    }}>
+      <Stars />
 
-        <Panel style={{ marginBottom: "1rem" }}>
-          <Eyebrow style={{ color: "var(--mo-cyan)" }}>Code de connexion</Eyebrow>
-          {peerStatus === "connecting" && (
-            <p style={{ color: "var(--mo-ink-dim)", margin: "0.5rem 0" }}>Connexion en cours…</p>
-          )}
+      {/* ── TOP BAR ── */}
+      <div style={{
+        position: 'relative', zIndex: 10, flex: '0 0 auto', height: 56,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '0 20px', borderBottom: '1px solid var(--mo-line)',
+        background: 'rgba(7,2,26,0.85)', backdropFilter: 'blur(12px)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <span className="mo-display" style={{ color: 'var(--mo-magenta)', fontSize: 17 }}>
+            MUSIC<span style={{ color: 'var(--mo-gold)' }}>'</span>OSE
+          </span>
+          <span style={{ width: 1, height: 20, background: 'var(--mo-line)' }} />
+          {peerStatus === "ready" && <Chip live>EN DIRECT</Chip>}
+          {peerStatus === "connecting" && <Chip>CONNEXION…</Chip>}
           {peerStatus === "error" && (
-            <p style={{ color: "var(--mo-magenta)", margin: "0.5rem 0" }}>
-              ❌ Erreur PeerJS — vérifie ta connexion et recharge la page
-            </p>
+            <span style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 11, color: 'var(--mo-magenta)' }}>
+              ❌ ERREUR PEERJS
+            </span>
           )}
-          {peerStatus === "ready" && (
-            <p style={{ fontSize: "1.8rem", color: "var(--mo-cyan)", fontWeight: "bold", margin: "0.5rem 0" }}>
-              {shortCode || hostId}
-            </p>
+          {shortCode && <Chip>CODE · {shortCode}</Chip>}
+          <Chip>{Object.keys(players).length} JOUEUR·SES</Chip>
+          <span style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 11, color: 'var(--mo-ink-dim)', letterSpacing: '0.1em' }}>
+            MANCHE {currentRound} · CHANSON {currentSongIndex + 1}{playlist ? `/${playlist.songs.length}` : ''}
+          </span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          {isCounting && (
+            <>
+              <span style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 11, color: 'var(--mo-cyan)' }}>● REC</span>
+              <span className="mo-display" style={{ fontSize: 28, color: 'var(--mo-gold)', textShadow: '0 0 12px var(--mo-gold)' }}>
+                {secondsLeft}s
+              </span>
+            </>
           )}
-        </Panel>
+        </div>
+      </div>
 
-        <Panel style={{ marginBottom: "1.5rem" }}>
-          <Eyebrow>Playlist</Eyebrow>
-          <select
-            value={selectedPlaylist}
-            onChange={(e) => {
-              setSelectedPlaylist(e.target.value);
-              setPlayers({});
-              setResponses([]);
-              setCurrentSongIndex(0);
-              setFastest(null);
-              setIsCounting(false);
-              setSecondsLeft(0);
-            }}
-            style={{
-              fontSize: "1rem",
-              padding: "0.5rem",
-              borderRadius: "8px",
-              border: "2px solid var(--mo-cyan)",
-              background: "var(--mo-bg-2)",
-              color: "var(--mo-ink)",
-              marginTop: "0.5rem",
-            }}
-          >
-            <option value="playlist1">Playlist 1</option>
-            <option value="playlist2">Playlist 2</option>
-            <option value="playlist3">Playlist 3</option>
-          </select>
-        </Panel>
+      {/* ── 3-COLUMN CONTENT ── */}
+      <div style={{
+        position: 'relative', zIndex: 1, flex: '1 1 auto', minHeight: 0,
+        display: 'grid', gridTemplateColumns: '260px 1fr 320px', gap: 12, padding: 12,
+      }}>
 
-        {currentSong && (
-          <Panel style={{ marginBottom: "1.5rem" }}>
-            <Eyebrow style={{ color: "var(--mo-gold)" }}>Chanson actuelle</Eyebrow>
-            <p style={{ fontSize: "1.2rem", fontWeight: "bold", margin: "0.5rem 0" }}>
-              {currentSongIndex + 1} / {playlist.songs.length} — Manche {currentRound}
-            </p>
-            <audio
-              ref={audioRef}
-              controls
-              style={{
-                marginTop: "1rem",
-                width: "100%",
-                maxWidth: "500px",
+        {/* LEFT — Playlist */}
+        <div className="mo-panel" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <div style={{
+            padding: '12px 14px', borderBottom: '1px solid var(--mo-line)',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          }}>
+            <span style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 10, letterSpacing: '0.2em', color: 'var(--mo-ink-dim)' }}>
+              PLAYLIST
+            </span>
+            {playlist && (
+              <span className="mo-display" style={{ fontSize: 11, color: 'var(--mo-cyan)' }}>
+                {currentSongIndex + 1}/{playlist.songs.length}
+              </span>
+            )}
+          </div>
+
+          <div style={{ padding: '12px 10px' }}>
+            <select
+              value={selectedPlaylist}
+              onChange={(e) => {
+                setSelectedPlaylist(e.target.value);
+                setPlayers({});
+                setResponses([]);
+                setCurrentSongIndex(0);
+                setFastest(null);
+                setIsCounting(false);
+                setSecondsLeft(0);
               }}
-            />
-            <div style={{ marginTop: "0.5rem", fontSize: "1rem" }}>
-              <strong>{currentSong.title}</strong> — {currentSong.artist}
-            </div>
-          </Panel>
-        )}
+              style={{
+                width: '100%', padding: '8px 10px', borderRadius: 8,
+                border: '1.5px solid var(--mo-cyan)', background: 'rgba(0,229,255,0.06)',
+                color: 'var(--mo-ink)', fontSize: 13, fontFamily: 'var(--mo-font-display)',
+                outline: 'none', marginBottom: 12,
+              }}
+            >
+              <option value="playlist1">Playlist 1</option>
+              <option value="playlist2">Playlist 2</option>
+              <option value="playlist3">Playlist 3</option>
+            </select>
+          </div>
 
-        <div style={{ display: "flex", gap: "1rem", justifyContent: "center", marginBottom: "1.5rem", flexWrap: "wrap" }}>
-          <Btn variant="ghost" onClick={previousSong}>⏮️ Précédente</Btn>
-          <Btn variant="gold" onClick={startSong}>🚨 Lancer</Btn>
-          <Btn variant="ghost" onClick={nextSong}>⏭️ Suivante</Btn>
+          <div style={{ flex: 1, overflowY: 'auto', padding: '0 8px 8px' }}>
+            {playlist && playlist.songs && playlist.songs.slice(
+              Math.max(0, currentSongIndex - 2),
+              currentSongIndex + 8
+            ).map((song, i) => {
+              const idx = Math.max(0, currentSongIndex - 2) + i;
+              const isNow = idx === currentSongIndex;
+              const isNext = idx === currentSongIndex + 1;
+              return (
+                <div key={idx} style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  padding: '7px 8px', borderRadius: 8,
+                  background: isNow ? 'linear-gradient(90deg, rgba(255,45,149,0.18), transparent)' : 'transparent',
+                  borderLeft: `2px solid ${isNow ? 'var(--mo-magenta)' : isNext ? 'var(--mo-cyan)' : 'transparent'}`,
+                  marginBottom: 2,
+                }}>
+                  <span style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 10, color: 'var(--mo-ink-dim)', width: 22, flexShrink: 0 }}>
+                    {String(idx + 1).padStart(2, '0')}
+                  </span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{
+                      fontSize: 12, fontWeight: 600,
+                      color: isNow ? 'var(--mo-magenta)' : 'var(--mo-ink)',
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    }}>{song.title}</div>
+                    <div style={{
+                      fontSize: 10, color: 'var(--mo-ink-dim)',
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    }}>{song.artist}</div>
+                  </div>
+                  {isNow && <Eq count={4} />}
+                  {isNext && (
+                    <span style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 9, color: 'var(--mo-cyan)', letterSpacing: '0.1em' }}>
+                      NEXT
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
 
-        {playlist && playlist.songs && currentSongIndex === playlist.songs.length - 1 && (
-          <Btn variant="magenta" onClick={sendFinalRanking} style={{ marginBottom: "1.5rem" }}>
-            🎉 Classement final
-          </Btn>
-        )}
+        {/* CENTER — Now playing */}
+        <div className="mo-panel" style={{
+          position: 'relative', overflow: 'hidden', padding: 20,
+          display: 'flex', flexDirection: 'column', gap: 16,
+        }}>
+          {/* Spotlight cone */}
+          <div style={{
+            position: 'absolute', top: -60, left: '50%', width: 500, height: 500,
+            background: 'radial-gradient(circle at 50% 0%, rgba(255,45,149,0.2), transparent 55%)',
+            transform: 'translateX(-50%)', pointerEvents: 'none',
+          }} />
 
-        {isCounting && (
-          <div
-            style={{
-              fontSize: "3rem",
-              color: "var(--mo-gold)",
-              fontWeight: "bold",
-              marginBottom: "1.5rem",
-              textShadow: "0 0 20px var(--mo-gold)",
-            }}
-          >
-            ⏱️ {secondsLeft}s
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative' }}>
+            <Chip>MANCHE {currentRound}</Chip>
+            {isCounting ? <Chip live>LECTURE</Chip> : <Chip>EN ATTENTE</Chip>}
           </div>
-        )}
 
-        <Panel style={{ marginBottom: "1.5rem" }}>
-          <Eyebrow>Réponses</Eyebrow>
-          {responses.length === 0 ? (
-            <p>En attente...</p>
-          ) : (
-            <ul style={{ listStyle: "none", padding: 0, textAlign: "left" }}>
-              {responses.map((r, i) => (
-                <li key={i} style={{ fontSize: "0.9rem", padding: "0.5rem", borderBottom: "1px solid var(--mo-line)" }}>
-                  <strong>{players[r.playerId]?.pseudo || "?"}</strong> → {r.title} / {r.artist} —{" "}
-                  <span style={{ color: "var(--mo-gold)" }}>{r.points} pts</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Panel>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, flex: 1, justifyContent: 'center', position: 'relative' }}>
+            <Vinyl size={180} labelColor="var(--mo-magenta)" />
 
-        <Panel>
-          <Eyebrow>Scores</Eyebrow>
-          {Object.keys(players).length === 0 ? (
-            <p>En attente des joueurs...</p>
-          ) : (
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.9rem" }}>
-              <thead>
-                <tr style={{ borderBottom: "2px solid var(--mo-cyan)" }}>
-                  <th style={{ padding: "0.5rem" }}>Pseudo</th>
-                  <th style={{ padding: "0.5rem" }}>M1</th>
-                  <th style={{ padding: "0.5rem" }}>M2</th>
-                  <th style={{ padding: "0.5rem" }}>M3</th>
-                  <th style={{ padding: "0.5rem" }}>M4</th>
-                  <th style={{ padding: "0.5rem" }}>Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                {Object.entries(players).map(([id, p], i) => (
-                  <tr key={i} style={{ borderBottom: "1px solid var(--mo-line)" }}>
-                    <td style={{ padding: "0.5rem", fontWeight: "bold" }}>{p.pseudo}</td>
-                    {p.scorePerRound.map((s, idx) => (
-                      <td key={idx} style={{ padding: "0.5rem" }}>{s}</td>
-                    ))}
-                    <td style={{ padding: "0.5rem", color: "var(--mo-gold)", fontWeight: "bold" }}>
-                      {p.totalScore}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            {currentSong && (
+              <div style={{ textAlign: 'center' }}>
+                <div className="mo-display mo-neon" style={{ fontSize: 28, color: 'var(--mo-magenta)', marginBottom: 4 }}>
+                  {currentSong.title.toUpperCase()}
+                </div>
+                <div style={{ fontFamily: 'var(--mo-font-display)', fontSize: 14, color: 'var(--mo-cyan)', letterSpacing: '0.05em' }}>
+                  {currentSong.artist.toUpperCase()}
+                </div>
+              </div>
+            )}
+
+            {/* Hidden audio element */}
+            <audio ref={audioRef} style={{ display: 'none' }} />
+
+            {/* Waveform */}
+            <div style={{ width: '100%', maxWidth: 480 }}>
+              <Waveform progress={waveformProgress} bars={60} />
+              <div style={{
+                display: 'flex', justifyContent: 'space-between',
+                fontFamily: 'var(--mo-font-mono)', fontSize: 10, color: 'var(--mo-ink-dim)', marginTop: 6,
+              }}>
+                <span>{totalSeconds - secondsLeft > 0 ? `${totalSeconds - secondsLeft}s` : '0s'}</span>
+                {isCounting
+                  ? <span style={{ color: 'var(--mo-gold)' }}>● RÉPONSES OUVERTES</span>
+                  : <span>EN ATTENTE</span>
+                }
+                <span>{totalSeconds > 0 ? `${totalSeconds}s` : '—'}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Transport */}
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+            <Btn variant="ghost" onClick={previousSong} style={{ width: 48, height: 48, padding: 0, borderRadius: 999, flexShrink: 0 }}>◀◀</Btn>
+            <Btn variant="gold" onClick={startSong} style={{ flex: 1, maxWidth: 280 }}>🚨 LANCER</Btn>
+            <Btn variant="ghost" onClick={nextSong} style={{ width: 48, height: 48, padding: 0, borderRadius: 999, flexShrink: 0 }}>▶▶</Btn>
+          </div>
+
+          {playlist && playlist.songs && currentSongIndex === playlist.songs.length - 1 && (
+            <Btn variant="magenta" onClick={sendFinalRanking} style={{ width: '100%' }}>
+              🎉 Classement final
+            </Btn>
           )}
-        </Panel>
+        </div>
+
+        {/* RIGHT — Responses + Scores */}
+        <div className="mo-panel" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          {/* Responses header */}
+          <div style={{
+            padding: '12px 14px', borderBottom: '1px solid var(--mo-line)',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0,
+          }}>
+            <span style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 10, letterSpacing: '0.2em', color: 'var(--mo-ink-dim)' }}>
+              RÉPONSES LIVE
+            </span>
+            <span className="mo-display" style={{ fontSize: 11, color: 'var(--mo-magenta)' }}>{responses.length}</span>
+          </div>
+
+          {/* Responses list */}
+          <div style={{ flex: '0 0 auto', maxHeight: '45%', overflowY: 'auto', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {responses.length === 0 ? (
+              <p style={{ color: 'var(--mo-ink-dim)', fontSize: 12, textAlign: 'center', padding: '12px 0' }}>En attente…</p>
+            ) : (
+              responses.map((r, i) => {
+                const pal = getResponsePalette(r);
+                return (
+                  <div key={i} style={{
+                    border: '1px solid var(--mo-line)',
+                    borderLeft: `3px solid ${pal.c}`,
+                    borderRadius: 10, padding: '8px 10px',
+                    background: 'rgba(255,255,255,0.02)',
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                      <span style={{ fontFamily: 'var(--mo-font-display)', fontSize: 11, color: 'var(--mo-ink)' }}>
+                        {players[r.playerId]?.pseudo || '?'}
+                      </span>
+                      <span style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 9, letterSpacing: '0.1em', color: pal.c }}>
+                        {pal.label} {r.points !== undefined ? `· +${r.points}` : ''}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, fontSize: 11 }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 8, color: 'var(--mo-ink-dim)', letterSpacing: '0.1em' }}>TITRE</div>
+                        <div style={{ fontWeight: 600, color: 'var(--mo-ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {r.title || '—'}
+                        </div>
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 8, color: 'var(--mo-ink-dim)', letterSpacing: '0.1em' }}>ARTISTE</div>
+                        <div style={{ fontWeight: 600, color: 'var(--mo-ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {r.artist || '—'}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* Scores divider */}
+          <div style={{
+            padding: '10px 14px 8px', borderTop: '1px solid var(--mo-line)', borderBottom: '1px solid var(--mo-line)',
+            flexShrink: 0,
+          }}>
+            <span style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 10, letterSpacing: '0.2em', color: 'var(--mo-ink-dim)' }}>
+              SCORES
+            </span>
+          </div>
+
+          {/* Scores list */}
+          <div style={{ flex: 1, overflowY: 'auto', padding: '8px 10px' }}>
+            {Object.keys(players).length === 0 ? (
+              <p style={{ color: 'var(--mo-ink-dim)', fontSize: 12, textAlign: 'center', padding: '12px 0' }}>
+                En attente des joueurs…
+              </p>
+            ) : (
+              Object.entries(players)
+                .sort(([, a], [, b]) => (b.totalScore || 0) - (a.totalScore || 0))
+                .map(([id, p], i) => (
+                  <div key={id} style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    padding: '7px 8px', borderBottom: '1px solid var(--mo-line)',
+                    background: i === 0 ? 'linear-gradient(90deg, rgba(255,214,10,0.08), transparent)' : 'transparent',
+                    borderRadius: 6,
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span className="mo-display" style={{
+                        fontSize: 12,
+                        color: i === 0 ? 'var(--mo-gold)' : i === 1 ? 'var(--mo-cyan)' : i === 2 ? 'var(--mo-magenta)' : 'var(--mo-ink-dim)',
+                      }}>#{i + 1}</span>
+                      <span style={{ fontFamily: 'var(--mo-font-display)', fontSize: 12 }}>{p.pseudo}</span>
+                    </div>
+                    <span className="mo-display" style={{ fontSize: 14, color: 'var(--mo-gold)' }}>{p.totalScore}</span>
+                  </div>
+                ))
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

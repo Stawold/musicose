@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Peer } from "peerjs";
-import { Btn, Input, Panel, Eyebrow } from "./components/MoUI";
+import { Btn, Input, Panel, Eyebrow, Chip, Eq, Stars, GridFloor } from "./components/MoUI";
 import { peerConfig } from "./peerConfig";
 import "./styles/tokens.css";
 
@@ -37,15 +37,25 @@ const generateSessionId = () => {
   return "sid-" + Date.now() + "-" + Math.random().toString(36).slice(2);
 };
 
+const AVATAR_COLORS = [
+  'var(--mo-magenta)',
+  'var(--mo-cyan)',
+  'var(--mo-gold)',
+  'var(--mo-violet)',
+  '#ff7a59',
+];
+
 export default function Player() {
-  const [joinStep, setJoinStep] = useState("pseudo"); // "pseudo" | "code" | "joined"
+  const [joinStep, setJoinStep] = useState("pseudo");
   const [pseudoInput, setPseudoInput] = useState("");
   const [codeInput, setCodeInput] = useState("");
   const [sessionId, setSessionId] = useState("");
+  const [avatarColor, setAvatarColor] = useState(AVATAR_COLORS[0]);
 
   const [title, setTitle] = useState("");
   const [artist, setArtist] = useState("");
   const [secondsLeft, setSecondsLeft] = useState(0);
+  const [totalSeconds, setTotalSeconds] = useState(0);
   const [canPlay, setCanPlay] = useState(false);
   const [peer, setPeer] = useState(null);
   const [conn, setConn] = useState(null);
@@ -58,10 +68,11 @@ export default function Player() {
   const [showRanking, setShowRanking] = useState(false);
   const [rankingData, setRankingData] = useState([]);
   const [restoredScore, setRestoredScore] = useState(null);
+  const [submittedAnswer, setSubmittedAnswer] = useState(null);
+  const [totalScore, setTotalScore] = useState(0);
 
   const KVDB_BASE = "https://kvdb.io/GVkYCf2Kfn44jq3EYGweRj/";
 
-  // Restaure la session depuis localStorage au démarrage
   useEffect(() => {
     const saved = localStorage.getItem("musicose_session");
     if (saved) {
@@ -74,6 +85,7 @@ export default function Player() {
           setJoinStep("code");
         }
         if (data.gameCode) setCodeInput(data.gameCode);
+        if (data.avatarColor) setAvatarColor(data.avatarColor);
       } catch (e) {
         localStorage.removeItem("musicose_session");
       }
@@ -104,16 +116,15 @@ export default function Player() {
     if (joinStep === "code") {
       if (!codeInput.trim()) { alert("Entre un code !"); return; }
 
-      // Capture les valeurs finales avant l'async
       const finalSessionId = sessionId || generateSessionId();
       const finalPseudo = pseudo || pseudoInput.trim();
       const finalCode = codeInput.trim();
 
-      // Persiste la session dès maintenant
       localStorage.setItem("musicose_session", JSON.stringify({
         sessionId: finalSessionId,
         pseudo: finalPseudo,
         gameCode: finalCode.toUpperCase(),
+        avatarColor,
       }));
 
       const newPeer = new Peer(undefined, peerConfig);
@@ -141,13 +152,16 @@ export default function Player() {
         connection.on("data", (data) => {
           if (data.type === "startTimer") {
             setCorrectAnswer(null);
+            setSubmittedAnswer(null);
             setSecondsLeft(data.seconds);
+            setTotalSeconds(data.seconds);
             setCanPlay(true);
             setCurrentSongIndex(typeof data.songIndex === "number" ? data.songIndex : null);
             if (typeof data.round === "number") setCurrentRound(data.round);
             setRoundStartTime(Date.now());
           } else if (data.type === "sessionRestored") {
             setRestoredScore(data.totalScore);
+            setTotalScore(data.totalScore || 0);
           } else if (data.type === "eliminatedRound4") {
             setActiveRound4(false);
           } else if (data.type === "revealAnswer") {
@@ -168,7 +182,6 @@ export default function Player() {
     }
   };
 
-  // Timer
   useEffect(() => {
     if (secondsLeft > 0) {
       const timer = setInterval(() => setSecondsLeft((prev) => prev - 1), 1000);
@@ -191,6 +204,7 @@ export default function Player() {
       pseudo,
       responseTime,
     };
+    setSubmittedAnswer({ title, artist });
     conn.send({ type: "playerResponse", response });
     setTitle("");
     setArtist("");
@@ -202,38 +216,43 @@ export default function Player() {
     setShowRanking(false);
   };
 
-  const containerStyle = {
-    background: "linear-gradient(135deg, var(--mo-bg-0) 0%, var(--mo-bg-1) 100%)",
-    color: "var(--mo-ink)",
-    fontFamily: "var(--mo-font-body)",
-    textAlign: "center",
-    minHeight: "100vh",
-    width: "100vw",
-    display: "flex",
-    flexDirection: "column",
-    justifyContent: "flex-start",
-    alignItems: "center",
-    paddingTop: "2rem",
-    paddingBottom: "2rem",
-    overflow: "hidden",
-    position: "relative",
-  };
+  const initials = pseudo ? pseudo.slice(0, 2).toUpperCase() : '?';
+  const timerProgress = totalSeconds > 0 ? secondsLeft / totalSeconds : 0;
 
-  // ÉCRAN D'INSCRIPTION
-  if (joinStep !== "joined") {
+  // ── JOIN: PSEUDO ────────────────────────────────────────────
+  if (joinStep === "pseudo") {
     return (
-      <div style={containerStyle}>
-        <h1 style={{ fontSize: "2.5rem", color: "var(--mo-magenta)", marginBottom: "2rem" }}>
-          Music'Ose
-        </h1>
+      <div className="mo-app" style={{
+        minHeight: '100vh', display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden',
+      }}>
+        <Stars />
+        <GridFloor />
 
-        <Panel style={{ maxWidth: "350px", width: "90%" }}>
-          {joinStep === "pseudo" && (
-            <>
-              <Eyebrow>Étape 1</Eyebrow>
-              <p style={{ marginTop: "1rem", marginBottom: "1.5rem", color: "var(--mo-ink-dim)" }}>
-                Quel est ton pseudo ?
-              </p>
+        <div style={{ position: 'absolute', top: 28, left: 18, right: 18, display: 'flex', alignItems: 'center', justifyContent: 'space-between', zIndex: 2 }}>
+          <div className="mo-display mo-neon" style={{ fontSize: 18, color: 'var(--mo-magenta)' }}>
+            MUSIC<span style={{ color: 'var(--mo-gold)' }}>'</span>OSE
+          </div>
+          <Chip live>READY</Chip>
+        </div>
+
+        <div style={{ position: 'relative', zIndex: 1, width: '100%', maxWidth: 360, padding: '0 20px' }}>
+          <div style={{ textAlign: 'center', marginBottom: 24 }}>
+            <span style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 10, letterSpacing: '0.3em', color: 'var(--mo-cyan)' }}>SCÈNE 01</span>
+            <h2 className="mo-display mo-neon" style={{ fontSize: 36, color: 'var(--mo-magenta)', margin: '10px 0 6px', lineHeight: 0.95 }}>
+              REJOINDRE<br/>UNE PARTIE
+            </h2>
+            <p style={{ fontSize: 12, color: 'var(--mo-ink-dim)', fontFamily: 'var(--mo-font-mono)' }}>
+              Demande le code à l'animateur·rice
+            </p>
+          </div>
+
+          <Panel style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 18 }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <span style={{ width: 8, height: 8, borderRadius: 99, background: 'var(--mo-magenta)', boxShadow: '0 0 8px var(--mo-magenta)', flexShrink: 0 }} />
+                <span style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 10, letterSpacing: '0.25em', color: 'var(--mo-magenta)' }}>TON BLAZE</span>
+              </div>
               <Input
                 color="magenta"
                 type="text"
@@ -243,201 +262,531 @@ export default function Player() {
                 placeholder="Ton pseudo"
                 autoComplete="off"
                 spellCheck="false"
-                style={{ marginBottom: "1rem", WebkitUserSelect: "text" }}
               />
-              <Btn variant="magenta" onClick={handleJoinGame} style={{ width: "100%" }}>
-                Continuer
-              </Btn>
-            </>
-          )}
+            </div>
 
-          {joinStep === "code" && (
-            <>
-              <Eyebrow>
-                {sessionId ? "Reprendre la partie" : "Étape 2"}
-              </Eyebrow>
-              <p style={{ marginTop: "1rem", marginBottom: "0.5rem", color: "var(--mo-ink-dim)" }}>
-                Code de la partie (OSE-XXXX ou ID complet)
+            <div>
+              <div style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 10, letterSpacing: '0.25em', color: 'var(--mo-ink-dim)', marginBottom: 10 }}>
+                AVATAR
+              </div>
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'space-between' }}>
+                {AVATAR_COLORS.map((c) => (
+                  <div
+                    key={c}
+                    onClick={() => setAvatarColor(c)}
+                    style={{
+                      width: 52, height: 52, borderRadius: '50%', cursor: 'pointer',
+                      background: `radial-gradient(circle at 30% 25%, ${c}, rgba(0,0,0,0.4))`,
+                      border: avatarColor === c ? `2.5px solid ${c}` : '1.5px solid rgba(255,255,255,0.1)',
+                      boxShadow: avatarColor === c ? `0 0 16px ${c}` : 'none',
+                      position: 'relative', transition: 'all 0.15s ease',
+                    }}
+                  >
+                    {avatarColor === c && (
+                      <span style={{
+                        position: 'absolute', bottom: -4, right: -4, width: 18, height: 18,
+                        borderRadius: '50%', background: 'var(--mo-bg-0)',
+                        border: `2px solid ${c}`, display: 'flex', alignItems: 'center',
+                        justifyContent: 'center', color: c, fontSize: 10,
+                      }}>✓</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <Btn variant="magenta" onClick={handleJoinGame} style={{ width: '100%', fontSize: 15, padding: '16px 20px' }}>
+              ⚡ ENTRER SUR SCÈNE
+            </Btn>
+          </Panel>
+        </div>
+      </div>
+    );
+  }
+
+  // ── JOIN: CODE ─────────────────────────────────────────────
+  if (joinStep === "code") {
+    return (
+      <div className="mo-app" style={{
+        minHeight: '100vh', display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden',
+      }}>
+        <Stars />
+        <GridFloor />
+
+        <div style={{ position: 'absolute', top: 28, left: 18, right: 18, display: 'flex', alignItems: 'center', justifyContent: 'space-between', zIndex: 2 }}>
+          <div className="mo-display mo-neon" style={{ fontSize: 18, color: 'var(--mo-magenta)' }}>
+            MUSIC<span style={{ color: 'var(--mo-gold)' }}>'</span>OSE
+          </div>
+          <Chip live>READY</Chip>
+        </div>
+
+        <div style={{ position: 'relative', zIndex: 1, width: '100%', maxWidth: 360, padding: '0 20px' }}>
+          <div style={{ textAlign: 'center', marginBottom: 24 }}>
+            <span style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 10, letterSpacing: '0.3em', color: 'var(--mo-cyan)' }}>
+              {sessionId ? 'REPRENDRE LA PARTIE' : 'ÉTAPE 2'}
+            </span>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginTop: 12 }}>
+              <div style={{
+                width: 48, height: 48, borderRadius: '50%', flexShrink: 0,
+                background: `radial-gradient(circle at 30% 25%, ${avatarColor}, rgba(0,0,0,0.3))`,
+                border: `2px solid ${avatarColor}`,
+                boxShadow: `0 0 12px ${avatarColor}`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontFamily: 'var(--mo-font-display)', fontSize: 14, color: 'var(--mo-bg-0)',
+              }}>{initials}</div>
+              <div className="mo-display" style={{ fontSize: 24, color: avatarColor }}>{pseudo}</div>
+            </div>
+            {sessionId && (
+              <p style={{ fontSize: 11, color: 'var(--mo-cyan)', marginTop: 8, fontFamily: 'var(--mo-font-mono)' }}>
+                Session sauvegardée — tu retrouveras tes points
               </p>
-              {sessionId && (
-                <p style={{ fontSize: "0.8rem", color: "var(--mo-cyan)", marginBottom: "1rem" }}>
-                  Session sauvegardée — tu retrouveras tes points
-                </p>
-              )}
+            )}
+          </div>
+
+          <Panel style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 18 }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <span style={{ width: 8, height: 8, borderRadius: 99, background: 'var(--mo-cyan)', boxShadow: '0 0 8px var(--mo-cyan)', flexShrink: 0 }} />
+                <span style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 10, letterSpacing: '0.25em', color: 'var(--mo-cyan)' }}>CODE DE LA PARTIE</span>
+              </div>
               <Input
                 color="cyan"
                 type="text"
                 value={codeInput}
                 onChange={(e) => setCodeInput(e.target.value)}
                 onKeyPress={(e) => e.key === "Enter" && handleJoinGame()}
-                placeholder="Code"
+                placeholder="OSE-XXXX"
                 autoComplete="off"
                 spellCheck="false"
-                style={{ marginBottom: "1rem", WebkitUserSelect: "text" }}
               />
-              <Btn variant="cyan" onClick={handleJoinGame} style={{ width: "100%" }}>
-                Rejoindre
-              </Btn>
-              <button
-                onClick={() => {
-                  localStorage.removeItem("musicose_session");
-                  setSessionId("");
-                  setPseudo("");
-                  setPseudoInput("");
-                  setCodeInput("");
-                  setJoinStep("pseudo");
-                }}
-                style={{
-                  marginTop: "1rem",
-                  background: "none",
-                  border: "none",
-                  color: "var(--mo-ink-faint)",
-                  fontSize: "0.8rem",
-                  cursor: "pointer",
-                  textDecoration: "underline",
-                }}
-              >
-                Changer de joueur
-              </button>
-            </>
-          )}
-        </Panel>
+              <div style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 9, color: 'var(--mo-ink-dim)', marginTop: 6, letterSpacing: '0.2em', textAlign: 'center' }}>
+                FORMAT · OSE-XXXX
+              </div>
+            </div>
+
+            <Btn variant="cyan" onClick={handleJoinGame} style={{ width: '100%', fontSize: 15, padding: '16px 20px' }}>
+              ⚡ REJOINDRE
+            </Btn>
+
+            <button
+              onClick={() => {
+                localStorage.removeItem("musicose_session");
+                setSessionId("");
+                setPseudo("");
+                setPseudoInput("");
+                setCodeInput("");
+                setJoinStep("pseudo");
+              }}
+              style={{
+                background: 'none', border: 'none', color: 'var(--mo-ink-faint)',
+                fontSize: '0.8rem', cursor: 'pointer', textDecoration: 'underline',
+                fontFamily: 'var(--mo-font-body)', textAlign: 'center', padding: 0,
+              }}
+            >
+              Changer de joueur
+            </button>
+          </Panel>
+        </div>
       </div>
     );
   }
 
-  // ÉCRAN DE JEU
-  return (
-    <div style={containerStyle}>
-      <h1 style={{ fontSize: "clamp(2rem, 6vw, 3rem)", color: "var(--mo-magenta)", marginBottom: "0.5rem" }}>
-        Music'Ose
-      </h1>
+  // ── JOINED — WAITING ROOM ─────────────────────────────────
+  if (joinStep === "joined" && !canPlay && !correctAnswer && !showRanking) {
+    return (
+      <div className="mo-app" style={{
+        minHeight: '100vh', display: 'flex', flexDirection: 'column',
+        position: 'relative', overflow: 'hidden',
+      }}>
+        <Stars />
 
-      {secondsLeft > 0 && (
-        <div
-          style={{
-            fontSize: "3.5rem",
-            color: "var(--mo-cyan)",
-            fontWeight: "bold",
-            marginBottom: "1rem",
-            textShadow: "0 0 15px var(--mo-cyan)",
-          }}
-        >
-          {secondsLeft}s
+        {/* Top bar */}
+        <div style={{ position: 'relative', zIndex: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 18px' }}>
+          <div>
+            <div className="mo-display mo-neon" style={{ fontSize: 14, color: 'var(--mo-magenta)' }}>
+              MUSIC<span style={{ color: 'var(--mo-gold)' }}>'</span>OSE
+            </div>
+            {codeInput && (
+              <div style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 9, letterSpacing: '0.2em', color: 'var(--mo-ink-dim)' }}>
+                CODE · {codeInput.toUpperCase()}
+              </div>
+            )}
+          </div>
+          <Chip live>CONNECTÉ·E</Chip>
         </div>
-      )}
 
-      <h2
-        style={{
-          fontSize: "1.8rem",
-          color: "var(--mo-magenta)",
-          marginBottom: "0.5rem",
-          fontFamily: "var(--mo-font-display)",
-          textShadow: "0 0 10px var(--mo-magenta)",
-        }}
-      >
-        {pseudo}
-      </h2>
+        {/* Avatar + pseudo */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '0 18px', position: 'relative', zIndex: 2 }}>
+          <div style={{
+            width: 42, height: 42, borderRadius: '50%',
+            background: `radial-gradient(circle at 30% 25%, ${avatarColor}, rgba(0,0,0,0.3))`,
+            border: `2px solid ${avatarColor}`, boxShadow: `0 0 10px ${avatarColor}`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontFamily: 'var(--mo-font-display)', fontSize: 12, color: 'var(--mo-bg-0)',
+          }}>{initials}</div>
+          <div>
+            <div style={{ fontFamily: 'var(--mo-font-display)', fontSize: 16 }}>{pseudo}</div>
+            {(restoredScore !== null) && (
+              <div style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 9, color: 'var(--mo-cyan)', letterSpacing: '0.15em' }}>
+                {restoredScore} PTS RESTAURÉS
+              </div>
+            )}
+          </div>
+        </div>
 
-      {restoredScore !== null && (
-        <p style={{ fontSize: "0.85rem", color: "var(--mo-cyan)", marginBottom: "0.5rem" }}>
-          Session restaurée — {restoredScore} pts récupérés
-        </p>
-      )}
+        {/* Spinning disc */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 20, position: 'relative', zIndex: 2 }}>
+          <div style={{ position: 'relative', width: 160, height: 160 }}>
+            <div style={{
+              position: 'absolute', inset: 0, borderRadius: '50%',
+              background: 'conic-gradient(from 0deg, transparent 0deg, var(--mo-cyan) 30deg, transparent 60deg, var(--mo-magenta) 180deg, transparent 240deg, var(--mo-gold) 320deg, transparent 360deg)',
+              animation: 'mo-rotate 4s linear infinite',
+              filter: 'blur(2px)',
+            }} />
+            <div style={{
+              position: 'absolute', inset: 14, borderRadius: '50%',
+              background: 'var(--mo-bg-0)', border: '2px solid var(--mo-magenta)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              boxShadow: '0 0 24px var(--mo-magenta), inset 0 0 24px rgba(255,45,149,0.3)',
+            }}>
+              <Eq count={5} />
+            </div>
+          </div>
 
-      <h3
-        style={{
-          fontSize: "1.5rem",
-          color: "var(--mo-gold)",
-          marginBottom: "1.5rem",
-          fontFamily: "var(--mo-font-display)",
-        }}
-      >
-        {roundNames[currentRound - 1] || `Manche ${currentRound}`}
-      </h3>
+          <div className="mo-display mo-neon" style={{ fontSize: 36, color: 'var(--mo-magenta)', lineHeight: 0.95, textAlign: 'center' }}>
+            EN ATTENTE
+          </div>
+          <div style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 11, letterSpacing: '0.25em', color: 'var(--mo-cyan)', textAlign: 'center' }}>
+            L'HÔTE LANCE BIENTÔT LA 1ère MANCHE
+          </div>
+        </div>
 
-      {correctAnswer ? (
-        <Panel style={{ maxWidth: "350px", marginBottom: "2rem" }}>
-          <Eyebrow style={{ color: "var(--mo-gold)" }}>Réponse</Eyebrow>
-          <p style={{ fontSize: "1.3rem", fontWeight: "bold", marginTop: "0.5rem" }}>
-            {correctAnswer.title}
-          </p>
-          <p style={{ fontSize: "1rem", opacity: 0.9 }}>— {correctAnswer.artist}</p>
-          <p style={{ fontSize: "0.9rem", marginTop: "1rem", opacity: 0.7 }}>
-            Attends que l'hôte passe à la chanson suivante
-          </p>
+        {/* Tip */}
+        <div style={{ padding: '0 18px 24px', position: 'relative', zIndex: 2 }}>
+          <div style={{ padding: 14, borderRadius: 14, border: '1px dashed var(--mo-line)', textAlign: 'center' }}>
+            <div style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 9, letterSpacing: '0.3em', color: 'var(--mo-gold)' }}>★ TIP</div>
+            <div style={{ fontSize: 12, color: 'var(--mo-ink-dim)', marginTop: 4 }}>
+              Mets le son. Plus tu réponds vite, plus tu marques.
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── JOINED — REVEAL (correct answer received) ─────────────
+  if (joinStep === "joined" && correctAnswer) {
+    const titleCorrect = submittedAnswer && isCorrect(submittedAnswer.title, correctAnswer.title);
+    const artistCorrect = submittedAnswer && isCorrect(submittedAnswer.artist, correctAnswer.artist);
+    const gotPoints = submittedAnswer && (titleCorrect || artistCorrect);
+
+    if (gotPoints) {
+      // GOOD feedback
+      return (
+        <div className="mo-app" style={{ minHeight: '100vh', position: 'relative', overflow: 'hidden' }}>
+          <Stars />
+          {/* Gold burst */}
+          <div style={{
+            position: 'absolute', top: '35%', left: '50%', transform: 'translate(-50%,-50%)',
+            width: 400, height: 400, pointerEvents: 'none',
+            background: 'radial-gradient(circle, rgba(255,214,10,0.35), rgba(255,45,149,0.18) 30%, transparent 60%)',
+          }} />
+
+          <div style={{ position: 'absolute', top: 20, left: 18, right: 18, display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 2 }}>
+            <Chip live>RÉPONSE</Chip>
+            <div style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 9, letterSpacing: '0.2em', color: 'var(--mo-ink-dim)' }}>{pseudo}</div>
+          </div>
+
+          <div style={{ position: 'relative', zIndex: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', gap: 16, padding: '80px 24px 24px', textAlign: 'center' }}>
+            {/* Gold badge */}
+            <div style={{ position: 'relative', width: 120, height: 120 }}>
+              <div style={{
+                position: 'absolute', inset: 0, borderRadius: '50%',
+                background: 'radial-gradient(circle, var(--mo-gold), #cc9c00)',
+                boxShadow: '0 0 40px var(--mo-gold), inset 0 0 20px rgba(0,0,0,0.2)',
+              }} />
+              <svg viewBox="0 0 100 100" width="120" height="120" style={{ position: 'absolute', inset: 0 }}>
+                <polygon points="50,18 60,42 86,42 65,58 73,82 50,68 27,82 35,58 14,42 40,42" fill="var(--mo-bg-0)" />
+              </svg>
+            </div>
+
+            <div className="mo-display mo-neon" style={{ fontSize: 52, color: 'var(--mo-gold)', lineHeight: 0.9 }}>
+              {titleCorrect && artistCorrect ? 'PARFAIT !' : 'BRAVO !'}
+            </div>
+            <div style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 10, letterSpacing: '0.3em', color: 'var(--mo-cyan)' }}>
+              {titleCorrect && artistCorrect ? 'TITRE + ARTISTE' : titleCorrect ? 'TITRE ✓' : 'ARTISTE ✓'} · {roundNames[currentRound - 1]}
+            </div>
+
+            <Panel style={{ padding: 18, width: '100%' }}>
+              <div style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 10, letterSpacing: '0.25em', color: 'var(--mo-ink-dim)' }}>LA RÉPONSE</div>
+              <div className="mo-display" style={{ fontSize: 22, color: 'var(--mo-magenta)', marginTop: 6, lineHeight: 1.1 }}>
+                {correctAnswer.title.toUpperCase()}
+              </div>
+              <div style={{ fontFamily: 'var(--mo-font-display)', fontSize: 14, color: 'var(--mo-cyan)', marginTop: 4, letterSpacing: '0.04em' }}>
+                {correctAnswer.artist.toUpperCase()}
+              </div>
+            </Panel>
+
+            <div style={{ padding: 16, borderRadius: 14, border: '1px solid var(--mo-line)', width: '100%', background: 'rgba(255,255,255,0.03)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <Eq count={4} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600 }}>Prochaine chanson bientôt…</div>
+                  <div style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 10, color: 'var(--mo-ink-dim)', marginTop: 2 }}>L'hôte révèle aux autres joueurs</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    } else {
+      // BAD feedback
+      return (
+        <div className="mo-app" style={{ minHeight: '100vh', position: 'relative', overflow: 'hidden' }}>
+          <Stars />
+          {/* Red wash */}
+          <div style={{
+            position: 'absolute', inset: 0,
+            background: 'radial-gradient(ellipse at center top, rgba(255,45,149,0.2), transparent 60%)',
+            pointerEvents: 'none',
+          }} />
+
+          <div style={{ position: 'absolute', top: 20, left: 18, right: 18, display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 2 }}>
+            <Chip live>RÉPONSE</Chip>
+            <div style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 9, letterSpacing: '0.2em', color: 'var(--mo-ink-dim)' }}>{pseudo}</div>
+          </div>
+
+          <div style={{ position: 'relative', zIndex: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '80px 24px 24px', gap: 16, textAlign: 'center' }}>
+            {/* X badge */}
+            <div style={{ position: 'relative', width: 110, height: 110 }}>
+              <div style={{
+                position: 'absolute', inset: 0, borderRadius: '50%',
+                border: '3px solid var(--mo-magenta)',
+                boxShadow: '0 0 30px rgba(255,45,149,0.5), inset 0 0 16px rgba(255,45,149,0.2)',
+                background: 'rgba(255,45,149,0.08)',
+              }} />
+              <svg viewBox="0 0 100 100" width="110" height="110" style={{ position: 'absolute', inset: 0 }}>
+                <line x1="32" y1="32" x2="68" y2="68" stroke="var(--mo-magenta)" strokeWidth="6" strokeLinecap="round"
+                  style={{ filter: 'drop-shadow(0 0 6px var(--mo-magenta))' }} />
+                <line x1="68" y1="32" x2="32" y2="68" stroke="var(--mo-magenta)" strokeWidth="6" strokeLinecap="round"
+                  style={{ filter: 'drop-shadow(0 0 6px var(--mo-magenta))' }} />
+              </svg>
+            </div>
+
+            <div className="mo-display mo-neon" style={{ fontSize: 48, color: 'var(--mo-magenta)', lineHeight: 0.95 }}>
+              {submittedAnswer ? 'RATÉ !' : 'TEMPS !'}
+            </div>
+            <div style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 10, letterSpacing: '0.25em', color: 'var(--mo-ink-dim)' }}>
+              {submittedAnswer ? 'ON SE REFAIT SUR LA PROCHAINE' : 'LE TEMPS EST ÉCOULÉ'}
+            </div>
+
+            <Panel style={{ padding: 16, width: '100%', textAlign: 'left' }}>
+              <div style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 10, letterSpacing: '0.25em', color: 'var(--mo-ink-dim)' }}>C'ÉTAIT</div>
+              <div className="mo-display" style={{ fontSize: 20, color: 'var(--mo-cyan)', marginTop: 6, lineHeight: 1.1 }}>
+                {correctAnswer.title.toUpperCase()}
+              </div>
+              <div style={{ fontFamily: 'var(--mo-font-display)', fontSize: 13, color: 'var(--mo-gold)', marginTop: 4, letterSpacing: '0.04em' }}>
+                {correctAnswer.artist.toUpperCase()}
+              </div>
+            </Panel>
+
+            {submittedAnswer && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%', textAlign: 'left' }}>
+                {submittedAnswer.title && (
+                  <div style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid rgba(255,45,149,0.4)', background: 'rgba(255,45,149,0.06)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <div style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 9, color: 'var(--mo-ink-dim)', letterSpacing: '0.2em' }}>TA RÉPONSE TITRE</div>
+                      <div style={{ fontFamily: 'var(--mo-font-display)', fontSize: 13, color: 'var(--mo-magenta)', textDecoration: 'line-through' }}>{submittedAnswer.title}</div>
+                    </div>
+                    <span style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 10, color: 'var(--mo-magenta)' }}>✗ NON</span>
+                  </div>
+                )}
+                {submittedAnswer.artist && currentRound !== 2 && (
+                  <div style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid rgba(255,45,149,0.4)', background: 'rgba(255,45,149,0.06)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <div style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 9, color: 'var(--mo-ink-dim)', letterSpacing: '0.2em' }}>TA RÉPONSE ARTISTE</div>
+                      <div style={{ fontFamily: 'var(--mo-font-display)', fontSize: 13, color: 'var(--mo-magenta)', textDecoration: 'line-through' }}>{submittedAnswer.artist}</div>
+                    </div>
+                    <span style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 10, color: 'var(--mo-magenta)' }}>✗ NON</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+  }
+
+  // ── JOINED — GAME SCREEN ──────────────────────────────────
+  return (
+    <div className="mo-app" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden' }}>
+      <Stars />
+
+      {/* Top bar */}
+      <div style={{ position: 'relative', zIndex: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 18px' }}>
+        <div>
+          <div className="mo-display" style={{ color: 'var(--mo-magenta)', fontSize: 13 }}>
+            MUSIC<span style={{ color: 'var(--mo-gold)' }}>'</span>OSE
+          </div>
+          {codeInput && (
+            <div style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 8, letterSpacing: '0.2em', color: 'var(--mo-ink-dim)' }}>
+              CODE · {codeInput.toUpperCase()}
+            </div>
+          )}
+        </div>
+        {canPlay ? <Chip live>LIVE</Chip> : <Chip>EN ATTENTE</Chip>}
+      </div>
+
+      {/* Score */}
+      <div style={{ position: 'relative', zIndex: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 18px 12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{
+            width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
+            background: `radial-gradient(circle at 30% 25%, ${avatarColor}, rgba(0,0,0,0.3))`,
+            border: `1.5px solid ${avatarColor}`, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontFamily: 'var(--mo-font-display)', fontSize: 11, color: 'var(--mo-bg-0)',
+          }}>{initials}</div>
+          <div>
+            <div style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 8, letterSpacing: '0.2em', color: 'var(--mo-ink-dim)' }}>JOUEUR</div>
+            <div style={{ fontFamily: 'var(--mo-font-display)', fontSize: 14 }}>{pseudo}</div>
+          </div>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <div style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 8, letterSpacing: '0.2em', color: 'var(--mo-ink-dim)' }}>SCORE</div>
+          <div className="mo-display" style={{ fontSize: 24, color: 'var(--mo-gold)', textShadow: '0 0 10px var(--mo-gold)' }}>
+            {restoredScore !== null ? restoredScore : 0}
+          </div>
+        </div>
+      </div>
+
+      {/* Listening panel */}
+      <div style={{ position: 'relative', zIndex: 2, padding: '0 18px', marginBottom: 16 }}>
+        <Panel style={{ padding: 16, position: 'relative', overflow: 'hidden' }}>
+          <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle at 50% 30%, rgba(255,45,149,0.2), transparent 60%)', pointerEvents: 'none' }} />
+          <div style={{ position: 'relative', textAlign: 'center' }}>
+            <div style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 9, letterSpacing: '0.3em', color: 'var(--mo-ink-dim)' }}>
+              MANCHE {currentRound} · {roundNames[currentRound - 1] || `MANCHE ${currentRound}`}
+            </div>
+            <div style={{ margin: '12px auto 8px', display: 'flex', justifyContent: 'center' }}>
+              <Eq count={10} />
+            </div>
+            <div className="mo-display mo-neon" style={{ fontSize: 28, color: 'var(--mo-magenta)', margin: '4px 0' }}>
+              {canPlay ? 'ÇA JOUE…' : 'EN ATTENTE'}
+            </div>
+            {canPlay && (
+              <>
+                <div style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 10, color: 'var(--mo-cyan)' }}>
+                  {secondsLeft}s restantes
+                </div>
+                <div style={{ marginTop: 10, height: 4, background: 'rgba(255,255,255,0.08)', borderRadius: 99, overflow: 'hidden' }}>
+                  <div style={{
+                    width: `${timerProgress * 100}%`, height: '100%',
+                    background: 'linear-gradient(90deg, var(--mo-cyan), var(--mo-magenta))',
+                    boxShadow: '0 0 8px var(--mo-magenta)',
+                    transition: 'width 1s linear',
+                  }} />
+                </div>
+              </>
+            )}
+          </div>
         </Panel>
-      ) : (
-        <div style={{ width: "100%", maxWidth: "350px", marginBottom: "2rem" }}>
+      </div>
+
+      {/* Inputs */}
+      <div style={{ position: 'relative', zIndex: 2, padding: '0 18px', display: 'flex', flexDirection: 'column', gap: 14, flex: 1 }}>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <span style={{ width: 8, height: 8, borderRadius: 99, background: 'var(--mo-cyan)', boxShadow: '0 0 8px var(--mo-cyan)', flexShrink: 0 }} />
+            <span style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 10, letterSpacing: '0.25em', color: 'var(--mo-cyan)' }}>TITRE</span>
+          </div>
           <Input
-            color="magenta"
+            color="cyan"
             type="text"
-            placeholder="Titre"
+            placeholder="Sweet Dreams…"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             disabled={!canPlay || (currentRound === 4 && !activeRound4)}
             autoComplete="off"
             spellCheck="false"
-            style={{ marginBottom: "1rem", WebkitUserSelect: "text" }}
           />
-          {currentRound !== 2 && (
+        </div>
+
+        {currentRound !== 2 && (
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <span style={{ width: 8, height: 8, borderRadius: 99, background: 'var(--mo-magenta)', boxShadow: '0 0 8px var(--mo-magenta)', flexShrink: 0 }} />
+              <span style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 10, letterSpacing: '0.25em', color: 'var(--mo-magenta)' }}>ARTISTE</span>
+            </div>
             <Input
               color="magenta"
               type="text"
-              placeholder="Artiste"
+              placeholder="Eurythmics…"
               value={artist}
               onChange={(e) => setArtist(e.target.value)}
               disabled={!canPlay || (currentRound === 4 && !activeRound4)}
               autoComplete="off"
               spellCheck="false"
-              style={{ marginBottom: "1rem", WebkitUserSelect: "text" }}
             />
-          )}
-          {!activeRound4 && currentRound === 4 && (
-            <p style={{ color: "var(--mo-magenta)", marginTop: "1rem" }}>
-              ❌ Tu ne peux plus jouer sur cette manche.
-            </p>
-          )}
-          <Btn
-            variant="magenta"
-            onClick={handleSubmit}
-            disabled={!canPlay || (currentRound === 4 && !activeRound4)}
-            style={{ width: "100%", fontSize: "1.3rem", padding: "1rem" }}
-          >
-            ✅ VALIDER
-          </Btn>
-        </div>
-      )}
+          </div>
+        )}
 
-      {showRanking && (
-        <div
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            width: "100vw",
-            height: "100vh",
-            background: "rgba(0,0,0,0.9)",
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-            zIndex: 9999,
-          }}
+        {!activeRound4 && currentRound === 4 && (
+          <p style={{ color: 'var(--mo-magenta)', fontSize: 13, fontFamily: 'var(--mo-font-mono)', textAlign: 'center', letterSpacing: '0.1em' }}>
+            ❌ ÉLIMINÉ·E DE CETTE MANCHE
+          </p>
+        )}
+
+        <Btn
+          variant="gold"
+          onClick={handleSubmit}
+          disabled={!canPlay || (currentRound === 4 && !activeRound4)}
+          style={{ width: '100%', fontSize: 16, padding: '18px 20px' }}
         >
-          <Panel style={{ maxWidth: "400px", width: "90%", textAlign: "center" }}>
-            <h2 style={{ color: "var(--mo-gold)", marginBottom: "1.5rem", fontSize: "2rem" }}>
-              🏆 Classement
-            </h2>
+          ⚡ VALIDER MA RÉPONSE
+        </Btn>
+
+        {canPlay && (
+          <div style={{ textAlign: 'center', fontFamily: 'var(--mo-font-mono)', fontSize: 9, color: 'var(--mo-ink-dim)', letterSpacing: '0.2em' }}>
+            PLUS C'EST RAPIDE, PLUS ÇA RAPPORTE
+          </div>
+        )}
+      </div>
+
+      {/* Ranking overlay */}
+      {showRanking && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(7,2,26,0.96)',
+          display: 'flex', justifyContent: 'center', alignItems: 'center',
+          zIndex: 9999,
+        }}>
+          <Stars />
+          <Panel style={{ maxWidth: 380, width: '90%', textAlign: 'center', padding: 32, position: 'relative', zIndex: 2 }}>
+            <div className="mo-display mo-neon" style={{ fontSize: 40, color: 'var(--mo-gold)', marginBottom: 24 }}>
+              CLASSEMENT
+            </div>
             {rankingData.map((player, index) => (
-              <div key={index} style={{ fontSize: "1.2rem", margin: "0.5rem 0" }}>
-                <strong style={{ color: index === 0 ? "var(--mo-gold)" : "var(--mo-ink)" }}>
-                  {index + 1}. {player.pseudo || player.name}
-                </strong>{" "}
-                — {player.score} pts
+              <div key={index} style={{
+                display: 'flex', alignItems: 'center', gap: 12,
+                padding: '10px 0', borderBottom: '1px solid var(--mo-line)',
+              }}>
+                <span className="mo-display" style={{
+                  fontSize: 18, width: 36, textAlign: 'left',
+                  color: index === 0 ? 'var(--mo-gold)' : index === 1 ? 'var(--mo-cyan)' : index === 2 ? 'var(--mo-magenta)' : 'var(--mo-ink-dim)',
+                  textShadow: index < 3 ? '0 0 8px currentColor' : 'none',
+                }}>#{index + 1}</span>
+                <span style={{ flex: 1, fontFamily: 'var(--mo-font-display)', fontSize: 14, textAlign: 'left' }}>
+                  {player.pseudo || player.name}
+                </span>
+                <span className="mo-display" style={{
+                  fontSize: 16,
+                  color: index === 0 ? 'var(--mo-gold)' : 'var(--mo-ink)',
+                }}>{player.score} pts</span>
               </div>
             ))}
-            <Btn variant="cyan" onClick={handleRankingContinue} style={{ marginTop: "2rem", width: "100%" }}>
-              Continuer ▶️
+            <Btn variant="cyan" onClick={handleRankingContinue} style={{ marginTop: 24, width: '100%' }}>
+              Continuer ▶
             </Btn>
           </Panel>
         </div>
