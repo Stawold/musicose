@@ -141,3 +141,7 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# Fichiers locaux lourds — déployer dist/ manuellement sur Netlify
+dist
+public/
