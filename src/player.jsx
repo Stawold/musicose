@@ -153,6 +153,8 @@ export default function Player() {
           if (data.type === "startTimer") {
             setCorrectAnswer(null);
             setSubmittedAnswer(null);
+            setTitle("");
+            setArtist("");
             setSecondsLeft(data.seconds);
             setTotalSeconds(data.seconds);
             setCanPlay(true);
@@ -167,6 +169,9 @@ export default function Player() {
           } else if (data.type === "revealAnswer") {
             setCorrectAnswer({ title: data.title || "", artist: data.artist || "" });
             setCanPlay(false);
+            if (typeof data.points === "number") {
+              setTotalScore(prev => prev + data.points);
+            }
           } else if (data.type === "showRanking") {
             setRankingData(data.ranking || []);
             setShowRanking(true);
@@ -187,7 +192,7 @@ export default function Player() {
       const timer = setInterval(() => setSecondsLeft((prev) => prev - 1), 1000);
       return () => clearInterval(timer);
     } else if (secondsLeft === 0 && canPlay) {
-      setCanPlay(false);
+      handleSubmit();
     }
   }, [secondsLeft, canPlay]);
 
@@ -457,9 +462,6 @@ export default function Player() {
           <div className="mo-display mo-neon" style={{ fontSize: 36, color: 'var(--mo-magenta)', lineHeight: 0.95, textAlign: 'center' }}>
             EN ATTENTE
           </div>
-          <div style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 11, letterSpacing: '0.25em', color: 'var(--mo-cyan)', textAlign: 'center' }}>
-            L'HÔTE LANCE BIENTÔT LA 1ère MANCHE
-          </div>
         </div>
 
         {/* Tip */}
@@ -656,7 +658,7 @@ export default function Player() {
         <div style={{ textAlign: 'right' }}>
           <div style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 8, letterSpacing: '0.2em', color: 'var(--mo-ink-dim)' }}>SCORE</div>
           <div className="mo-display" style={{ fontSize: 24, color: 'var(--mo-gold)', textShadow: '0 0 10px var(--mo-gold)' }}>
-            {restoredScore !== null ? restoredScore : 0}
+            {totalScore}
           </div>
         </div>
       </div>
@@ -704,7 +706,7 @@ export default function Player() {
           <Input
             color="cyan"
             type="text"
-            placeholder="Sweet Dreams…"
+            placeholder="Titre de la chanson…"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             disabled={!canPlay || (currentRound === 4 && !activeRound4)}
@@ -722,7 +724,7 @@ export default function Player() {
             <Input
               color="magenta"
               type="text"
-              placeholder="Eurythmics…"
+              placeholder="Artiste…"
               value={artist}
               onChange={(e) => setArtist(e.target.value)}
               disabled={!canPlay || (currentRound === 4 && !activeRound4)}

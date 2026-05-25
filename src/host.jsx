@@ -49,6 +49,7 @@ export default function Host() {
   const [shortCode, setShortCode] = useState(null);
   const [peerStatus, setPeerStatus] = useState("idle");
   const [totalSeconds, setTotalSeconds] = useState(0);
+  const [isAudioPlaying, setIsAudioPlaying] = useState(false);
 
   const bonusOrderRef = useRef({});
   const audioRef = useRef(null);
@@ -322,7 +323,7 @@ export default function Host() {
 
             resp.points = points;
             setResponses(prev => [...prev, { ...resp, playerId: sessionId }]);
-            conn.send({ type: "revealAnswer", title: correctTitle, artist: correctArtist });
+            conn.send({ type: "revealAnswer", title: correctTitle, artist: correctArtist, points });
           }
         } catch (e) {
           console.error("Erreur traitement data :", e);
@@ -347,7 +348,7 @@ export default function Host() {
   const startSong = () => {
     if (!playlist || !playlist.songs) return;
     const songFile = playlist.songs[currentSongIndex]?.file;
-    const duration = currentRound === 1 ? 8 : currentRound === 2 ? 10 : currentRound === 3 ? 12 : 15;
+    const duration = currentRound === 1 ? 30 : currentRound === 2 ? 25 : currentRound === 3 ? 20 : 20;
 
     if (!songFile) {
       alert("Fichier audio manquant pour cette chanson");
@@ -367,6 +368,18 @@ export default function Host() {
       audioRef.current.src = `/playlists/${selectedPlaylist}/${songFile}`;
       audioRef.current.currentTime = 0;
       audioRef.current.play().catch(err => console.warn("Lecture audio bloquée :", err));
+      setIsAudioPlaying(true);
+    }
+  };
+
+  const togglePause = () => {
+    if (!audioRef.current) return;
+    if (isAudioPlaying) {
+      audioRef.current.pause();
+      setIsAudioPlaying(false);
+    } else {
+      audioRef.current.play().catch(err => console.warn("Lecture audio bloquée :", err));
+      setIsAudioPlaying(true);
     }
   };
 
@@ -385,6 +398,7 @@ export default function Host() {
       setIsCounting(false);
       setSecondsLeft(0);
       setFastest(null);
+      setIsAudioPlaying(false);
       if (audioRef.current) { audioRef.current.pause(); audioRef.current.currentTime = 0; }
     }
   };
@@ -396,6 +410,7 @@ export default function Host() {
       setIsCounting(false);
       setSecondsLeft(0);
       setFastest(null);
+      setIsAudioPlaying(false);
       if (audioRef.current) { audioRef.current.pause(); audioRef.current.currentTime = 0; }
     }
   };
@@ -635,7 +650,13 @@ export default function Host() {
           {/* Transport */}
           <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
             <Btn variant="ghost" onClick={previousSong} style={{ width: 48, height: 48, padding: 0, borderRadius: 999, flexShrink: 0 }}>◀◀</Btn>
-            <Btn variant="gold" onClick={startSong} style={{ flex: 1, maxWidth: 280 }}>🚨 LANCER</Btn>
+            <Btn variant="gold" onClick={startSong} style={{ flex: 1, maxWidth: 200 }}>🚨 LANCER</Btn>
+            {isAudioPlaying && (
+              <Btn variant="ghost" onClick={togglePause} style={{ width: 48, height: 48, padding: 0, borderRadius: 999, flexShrink: 0 }}>⏸</Btn>
+            )}
+            {!isAudioPlaying && isCounting && (
+              <Btn variant="cyan" onClick={togglePause} style={{ width: 48, height: 48, padding: 0, borderRadius: 999, flexShrink: 0 }}>▶</Btn>
+            )}
             <Btn variant="ghost" onClick={nextSong} style={{ width: 48, height: 48, padding: 0, borderRadius: 999, flexShrink: 0 }}>▶▶</Btn>
           </div>
 
