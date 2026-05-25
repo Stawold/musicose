@@ -46,6 +46,7 @@ export default function Host() {
   const [currentRound, setCurrentRound] = useState(1);
   const [bonusWinnerId, setBonusWinnerId] = useState(null);
   const [shortCode, setShortCode] = useState(null);
+  const [peerStatus, setPeerStatus] = useState("idle"); // "idle" | "connecting" | "ready" | "error"
 
   const bonusOrderRef = useRef({});
   const audioRef = useRef(null);
@@ -161,17 +162,25 @@ export default function Host() {
 
     const newPeer = new Peer();
     setPeer(newPeer);
+    setPeerStatus("connecting");
 
     newPeer.on("open", async (id) => {
       setHostId(id);
       try {
         const sc = "OSE-" + id.slice(-4).toUpperCase();
         setShortCode(sc);
+        shortCodeRef.current = sc; // Mise à jour immédiate sans attendre le useEffect
+        setPeerStatus("ready");
         console.log("ShortCode généré :", sc);
         sendShortCodeToKvdb(sc, id);
       } catch (e) {
         console.warn("Erreur génération shortCode :", e);
       }
+    });
+
+    newPeer.on("error", (err) => {
+      console.error("Erreur PeerJS :", err);
+      setPeerStatus("error");
     });
 
     newPeer.on("connection", (conn) => {
@@ -491,14 +500,22 @@ export default function Host() {
         <h1 style={titleStyle}>Music'Ose</h1>
         <h2 style={subtitleStyle}>Régie Hôte</h2>
 
-        {hostId && (
-          <Panel style={{ marginBottom: "1rem" }}>
-            <Eyebrow style={{ color: "var(--mo-cyan)" }}>Code de connexion</Eyebrow>
+        <Panel style={{ marginBottom: "1rem" }}>
+          <Eyebrow style={{ color: "var(--mo-cyan)" }}>Code de connexion</Eyebrow>
+          {peerStatus === "connecting" && (
+            <p style={{ color: "var(--mo-ink-dim)", margin: "0.5rem 0" }}>Connexion en cours…</p>
+          )}
+          {peerStatus === "error" && (
+            <p style={{ color: "var(--mo-magenta)", margin: "0.5rem 0" }}>
+              ❌ Erreur PeerJS — vérifie ta connexion et recharge la page
+            </p>
+          )}
+          {peerStatus === "ready" && (
             <p style={{ fontSize: "1.8rem", color: "var(--mo-cyan)", fontWeight: "bold", margin: "0.5rem 0" }}>
               {shortCode || hostId}
             </p>
-          </Panel>
-        )}
+          )}
+        </Panel>
 
         <Panel style={{ marginBottom: "1.5rem" }}>
           <Eyebrow>Playlist</Eyebrow>
