@@ -294,6 +294,8 @@ export default function Player() {
                 onKeyPress={(e) => e.key === "Enter" && handleJoinGame()}
                 placeholder="Ton pseudo"
                 autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="none"
                 spellCheck="false"
               />
             </div>
@@ -391,6 +393,8 @@ export default function Player() {
                 onKeyPress={(e) => e.key === "Enter" && handleJoinGame()}
                 placeholder="OSE-XXXX"
                 autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="none"
                 spellCheck="false"
               />
               <div style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 9, color: 'var(--mo-ink-dim)', marginTop: 6, letterSpacing: '0.2em', textAlign: 'center' }}>
@@ -800,6 +804,8 @@ export default function Player() {
             onChange={(e) => setTitle(e.target.value)}
             disabled={!canPlay || (currentRound === 4 && !activeRound4)}
             autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="none"
             spellCheck="false"
           />
         </div>
@@ -818,6 +824,8 @@ export default function Player() {
               onChange={(e) => setArtist(e.target.value)}
               disabled={!canPlay || (currentRound === 4 && !activeRound4)}
               autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="none"
               spellCheck="false"
             />
           </div>
