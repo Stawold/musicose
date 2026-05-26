@@ -62,6 +62,16 @@ const AVATAR_COLORS = [
   '#ff7a59',
 ];
 
+const getAvatarVariant = (color) => {
+  if (color === 'var(--mo-cyan)') return 'cyan';
+  if (color === 'var(--mo-gold)') return 'gold';
+  return 'magenta';
+};
+
+const getAvatarInputColor = (color) => {
+  return color === 'var(--mo-cyan)' ? 'cyan' : 'magenta';
+};
+
 export default function Player() {
   const [joinStep, setJoinStep] = useState("pseudo");
   const [pseudoInput, setPseudoInput] = useState("");
@@ -253,7 +263,7 @@ export default function Player() {
         <GridFloor />
 
         <div style={{ position: 'absolute', top: 28, left: 18, right: 18, display: 'flex', alignItems: 'center', justifyContent: 'space-between', zIndex: 2 }}>
-          <div className="mo-display mo-neon" style={{ fontSize: 18, color: 'var(--mo-magenta)' }}>
+          <div className="mo-display" style={{ fontSize: 18, color: 'var(--mo-magenta)' }}>
             MUSIC<span style={{ color: 'var(--mo-gold)' }}>'</span>OSE
           </div>
           <Chip live>READY</Chip>
@@ -261,8 +271,8 @@ export default function Player() {
 
         <div style={{ position: 'relative', zIndex: 1, width: '100%', maxWidth: 360, padding: '0 20px' }}>
           <div style={{ textAlign: 'center', marginBottom: 24 }}>
-            <span style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 10, letterSpacing: '0.3em', color: 'var(--mo-cyan)' }}>SCÈNE 01</span>
-            <h2 className="mo-display mo-neon" style={{ fontSize: 36, color: 'var(--mo-magenta)', margin: '10px 0 6px', lineHeight: 0.95 }}>
+            <span style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 10, letterSpacing: '0.3em', color: avatarColor }}>SCÈNE 01</span>
+            <h2 className="mo-display" style={{ fontSize: 36, color: avatarColor, margin: '10px 0 6px', lineHeight: 0.95, textShadow: '0 0 6px currentColor' }}>
               REJOINDRE<br/>UNE PARTIE
             </h2>
             <p style={{ fontSize: 12, color: 'var(--mo-ink-dim)', fontFamily: 'var(--mo-font-mono)' }}>
@@ -273,11 +283,11 @@ export default function Player() {
           <Panel style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 18 }}>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                <span style={{ width: 8, height: 8, borderRadius: 99, background: 'var(--mo-magenta)', boxShadow: '0 0 8px var(--mo-magenta)', flexShrink: 0 }} />
-                <span style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 10, letterSpacing: '0.25em', color: 'var(--mo-magenta)' }}>TON BLAZE</span>
+                <span style={{ width: 8, height: 8, borderRadius: 99, background: avatarColor, boxShadow: `0 0 8px ${avatarColor}`, flexShrink: 0 }} />
+                <span style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 10, letterSpacing: '0.25em', color: avatarColor }}>TON BLAZE</span>
               </div>
               <Input
-                color="magenta"
+                color={getAvatarInputColor(avatarColor)}
                 type="text"
                 value={pseudoInput}
                 onChange={(e) => setPseudoInput(e.target.value)}
@@ -318,7 +328,7 @@ export default function Player() {
               </div>
             </div>
 
-            <Btn variant="magenta" onClick={handleJoinGame} style={{ width: '100%', fontSize: 15, padding: '16px 20px' }}>
+            <Btn variant={getAvatarVariant(avatarColor)} onClick={handleJoinGame} style={{ width: '100%', fontSize: 15, padding: '16px 20px' }}>
               ⚡ ENTRER SUR SCÈNE
             </Btn>
           </Panel>
@@ -338,7 +348,7 @@ export default function Player() {
         <GridFloor />
 
         <div style={{ position: 'absolute', top: 28, left: 18, right: 18, display: 'flex', alignItems: 'center', justifyContent: 'space-between', zIndex: 2 }}>
-          <div className="mo-display mo-neon" style={{ fontSize: 18, color: 'var(--mo-magenta)' }}>
+          <div className="mo-display" style={{ fontSize: 18, color: 'var(--mo-magenta)' }}>
             MUSIC<span style={{ color: 'var(--mo-gold)' }}>'</span>OSE
           </div>
           <Chip live>READY</Chip>
@@ -427,7 +437,7 @@ export default function Player() {
         {/* Top bar */}
         <div style={{ position: 'relative', zIndex: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 18px' }}>
           <div>
-            <div className="mo-display mo-neon" style={{ fontSize: 14, color: 'var(--mo-magenta)' }}>
+            <div className="mo-display" style={{ fontSize: 14, color: 'var(--mo-magenta)' }}>
               MUSIC<span style={{ color: 'var(--mo-gold)' }}>'</span>OSE
             </div>
             {codeInput && (
@@ -487,7 +497,7 @@ export default function Player() {
           <div style={{ padding: 14, borderRadius: 14, border: '1px dashed var(--mo-line)', textAlign: 'center' }}>
             <div style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 9, letterSpacing: '0.3em', color: 'var(--mo-gold)' }}>★ TIP</div>
             <div style={{ fontSize: 12, color: 'var(--mo-ink-dim)', marginTop: 4 }}>
-              Mets le son. Plus tu réponds vite, plus tu marques.
+              Plus tu réponds vite, plus tu marques.
             </div>
           </div>
         </div>

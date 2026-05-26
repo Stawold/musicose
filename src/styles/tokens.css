@@ -54,7 +54,7 @@
   --mo-glow-cyan:    0 0 12px rgba(0,229,255,0.5),  0 0 30px rgba(0,229,255,0.25);
   --mo-glow-gold:    0 0 12px rgba(255,214,10,0.55), 0 0 30px rgba(255,214,10,0.25);
   --mo-glow-violet:  0 0 12px rgba(177,75,255,0.5),  0 0 30px rgba(177,75,255,0.25);
-  --mo-glow-text:    0 0 6px currentColor, 0 0 14px currentColor, 0 0 30px currentColor;
+  --mo-glow-text:    0 0 4px currentColor, 0 0 10px currentColor;
 
   /* Motion */
   --mo-ease:     cubic-bezier(.2,.7,.3,1);
@@ -175,6 +175,7 @@ button {
 
 /* --- Buttons -------------------------------------------- */
 .mo-btn {
+  box-sizing: border-box;
   display: inline-flex;
   align-items: center;
   justify-content: center;

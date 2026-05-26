@@ -67,6 +67,7 @@ export default function Host() {
   const [peerStatus, setPeerStatus] = useState("idle");
   const [totalSeconds, setTotalSeconds] = useState(0);
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
+  const [revealed, setRevealed] = useState(false);
 
   const bonusOrderRef = useRef({});
   const audioRef = useRef(null);
@@ -380,6 +381,7 @@ export default function Host() {
     setIsCounting(true);
     setFastest(null);
     setResponses([]);
+    setRevealed(false);
     bonusOrderRef.current[currentSongIndex] = [];
     if (audioRef.current) {
       audioRef.current.src = `/playlists/${selectedPlaylist}/${songFile}`;
@@ -387,6 +389,15 @@ export default function Host() {
       audioRef.current.play().catch(err => console.warn("Lecture audio bloquée :", err));
       setIsAudioPlaying(true);
     }
+  };
+
+  const revealCurrentSong = () => {
+    const songToReveal = playlist?.songs?.[currentSongIndex];
+    if (!songToReveal) return;
+    connections.forEach(c => {
+      try { c.send({ type: "revealAnswer", title: songToReveal.title, artist: songToReveal.artist }); } catch (e) {}
+    });
+    setRevealed(true);
   };
 
   const togglePause = () => {
@@ -423,6 +434,7 @@ export default function Host() {
       setIsCounting(false);
       setSecondsLeft(0);
       setFastest(null);
+      setRevealed(false);
       setIsAudioPlaying(false);
       if (audioRef.current) { audioRef.current.pause(); audioRef.current.currentTime = 0; }
     }
@@ -684,6 +696,16 @@ export default function Host() {
             )}
             <Btn variant="ghost" onClick={nextSong} style={{ width: 48, height: 48, padding: 0, borderRadius: 999, flexShrink: 0 }}>▶▶</Btn>
           </div>
+
+          {/* Reveal */}
+          <Btn
+            variant={revealed ? 'ghost' : 'magenta'}
+            onClick={revealCurrentSong}
+            disabled={!currentSong}
+            style={{ width: '100%' }}
+          >
+            {revealed ? '✓ RÉPONSE RÉVÉLÉE' : '👁 RÉVÉLER LA RÉPONSE'}
+          </Btn>
 
           {playlist && playlist.songs && currentSongIndex === playlist.songs.length - 1 && (
             <Btn variant="magenta" onClick={sendFinalRanking} style={{ width: '100%' }}>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Btn, Chip, Eyebrow, NeonNote, Stars, GridFloor, Eq } from "./components/MoUI";
+import { Btn, Chip, Eyebrow, Stars, GridFloor, Eq } from "./components/MoUI";
 import Host from "./host";
 import Player from "./player";
 import "./styles/tokens.css";
@@ -181,29 +181,17 @@ export default function App() {
         alignItems: 'center',
         gap: 28,
       }}>
-        {/* Title row */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
-          <NeonNote
-            size={56}
-            color="var(--mo-cyan)"
-            style={{ animation: 'mo-bob 2.4s ease-in-out infinite' }}
-          />
-          <h1
-            className="mo-display mo-neon"
-            style={{
-              margin: 0,
-              fontSize: 'clamp(3rem, 10vw, 8rem)',
-              color: 'var(--mo-magenta)',
-            }}
-          >
-            MUSIC<span style={{ color: 'var(--mo-gold)' }}>'</span>OSE
-          </h1>
-          <NeonNote
-            size={56}
-            color="var(--mo-cyan)"
-            style={{ animation: 'mo-bob 2.4s 0.4s ease-in-out infinite' }}
-          />
-        </div>
+        {/* Title */}
+        <h1
+          className="mo-display mo-neon"
+          style={{
+            margin: 0,
+            fontSize: 'clamp(3rem, 10vw, 8rem)',
+            color: 'var(--mo-magenta)',
+          }}
+        >
+          MUSIC<span style={{ color: 'var(--mo-gold)' }}>'</span>OSE
+        </h1>
 
         {/* Subtitle */}
         <div style={{
