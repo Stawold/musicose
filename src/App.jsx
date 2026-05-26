@@ -213,11 +213,18 @@ export default function App() {
             variant="cyan"
             label="CONSOLE"
             icon={
-              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="var(--mo-cyan)" strokeWidth="2"
-                style={{ filter: 'drop-shadow(0 0 4px var(--mo-cyan))' }}>
-                <rect x="2" y="6" width="20" height="12" rx="2" />
-                <circle cx="8" cy="12" r="2" />
-                <circle cx="16" cy="12" r="2" />
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="var(--mo-cyan)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
+                style={{ filter: 'drop-shadow(0 0 3px var(--mo-cyan)) drop-shadow(0 0 10px var(--mo-cyan))' }}>
+                {/* Vinyl record */}
+                <circle cx="11" cy="15" r="8" />
+                <circle cx="11" cy="15" r="5" />
+                <circle cx="11" cy="15" r="2" fill="var(--mo-cyan)" stroke="none" />
+                {/* Tonearm pivot */}
+                <circle cx="21" cy="5" r="1.5" fill="var(--mo-cyan)" stroke="none" />
+                {/* Tonearm */}
+                <line x1="21" y1="5" x2="15" y2="11" strokeWidth="2" />
+                {/* Needle */}
+                <line x1="15" y1="11" x2="13" y2="13.5" />
               </svg>
             }
             onClick={() => handleModeSelect("host")}
@@ -229,10 +236,19 @@ export default function App() {
             variant="magenta"
             label="SCÈNE"
             icon={
-              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="var(--mo-magenta)" strokeWidth="2"
-                style={{ filter: 'drop-shadow(0 0 4px var(--mo-magenta))' }}>
-                <path d="M12 2v10" />
-                <circle cx="12" cy="16" r="6" />
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="var(--mo-magenta)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
+                style={{ filter: 'drop-shadow(0 0 3px var(--mo-magenta)) drop-shadow(0 0 10px var(--mo-magenta))' }}>
+                {/* Mic capsule */}
+                <rect x="8" y="1" width="8" height="12" rx="4" />
+                {/* Grille lines */}
+                <line x1="9.5" y1="5" x2="14.5" y2="5" />
+                <line x1="9.5" y1="9" x2="14.5" y2="9" />
+                {/* Suspension */}
+                <path d="M6 13 Q6 18 12 18 Q18 18 18 13" />
+                {/* Stand pole */}
+                <line x1="12" y1="18" x2="12" y2="22" />
+                {/* Base */}
+                <line x1="8" y1="22" x2="16" y2="22" />
               </svg>
             }
             onClick={() => handleModeSelect("player")}
