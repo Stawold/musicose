@@ -95,6 +95,8 @@ export default function Player() {
   const [showRanking, setShowRanking] = useState(false);
   const [rankingData, setRankingData] = useState([]);
   const [isFastest, setIsFastest] = useState(false);
+  const [round3Bonus, setRound3Bonus] = useState(0);
+  const [showFinalRanking, setShowFinalRanking] = useState(false);
   const [restoredScore, setRestoredScore] = useState(null);
   const [submittedAnswer, setSubmittedAnswer] = useState(null);
   const [totalScore, setTotalScore] = useState(0);
@@ -184,6 +186,7 @@ export default function Player() {
             setTitle("");
             setArtist("");
             setIsFastest(false);
+            setRound3Bonus(0);
             setSecondsLeft(data.seconds);
             setTotalSeconds(data.seconds);
             setCanPlay(true);
@@ -195,6 +198,7 @@ export default function Player() {
               setTotalScore(prev => prev + data.points);
             }
             if (data.fastest) setIsFastest(true);
+            if (data.round3Bonus > 0) setRound3Bonus(data.round3Bonus);
           } else if (data.type === "sessionRestored") {
             setRestoredScore(data.totalScore);
             setTotalScore(data.totalScore || 0);
@@ -209,9 +213,9 @@ export default function Player() {
             setCanPlay(false);
           } else if (data.type === "showFinalRanking") {
             setRankingData(data.ranking || []);
-            setShowRanking(true);
+            setShowFinalRanking(true);
+            setShowRanking(false);
             setCanPlay(false);
-            alert("🎊 Fin du jeu ! Voici le classement final !");
           }
         });
       });
@@ -250,6 +254,7 @@ export default function Player() {
   const handleRankingContinue = () => {
     if (conn) conn.send({ type: "rankingAcknowledged" });
     setShowRanking(false);
+    setShowFinalRanking(false);
     setCorrectAnswer(null);
     setSubmittedAnswer(null);
   };
@@ -575,6 +580,98 @@ export default function Player() {
     );
   }
 
+  // ── CLASSEMENT INTER-MANCHE ────────────────────────────────
+  if (joinStep === "joined" && showRanking && !showFinalRanking) {
+    return (
+      <div style={{ position: 'fixed', inset: 0, background: 'rgba(7,2,26,0.96)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 9999 }}>
+        <Stars />
+        <Panel style={{ maxWidth: 380, width: '90%', textAlign: 'center', padding: 32, position: 'relative', zIndex: 2 }}>
+          <div className="mo-display mo-neon" style={{ fontSize: 40, color: 'var(--mo-gold)', marginBottom: 24 }}>CLASSEMENT</div>
+          {rankingData.map((player, index) => (
+            <div key={index} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid var(--mo-line)' }}>
+              <span className="mo-display" style={{ fontSize: 18, width: 36, textAlign: 'left', color: index === 0 ? 'var(--mo-gold)' : index === 1 ? 'var(--mo-cyan)' : index === 2 ? 'var(--mo-magenta)' : 'var(--mo-ink-dim)', textShadow: index < 3 ? '0 0 8px currentColor' : 'none' }}>#{index + 1}</span>
+              <span style={{ flex: 1, fontFamily: 'var(--mo-font-display)', fontSize: 14, textAlign: 'left' }}>{player.pseudo || player.name}</span>
+              <span className="mo-display" style={{ fontSize: 16, color: index === 0 ? 'var(--mo-gold)' : 'var(--mo-ink)' }}>{player.score} pts</span>
+            </div>
+          ))}
+          <Btn variant="cyan" onClick={handleRankingContinue} style={{ marginTop: 24, width: '100%' }}>Continuer ▶</Btn>
+        </Panel>
+      </div>
+    );
+  }
+
+  // ── PODIUM FINAL ───────────────────────────────────────────
+  if (joinStep === "joined" && showFinalRanking) {
+    const top3 = rankingData.slice(0, 3);
+    const rest = rankingData.slice(3);
+    // Visual order: 2nd (left) – 1st (center) – 3rd (right)
+    const podiumSlots = [
+      { player: top3[1], rank: 2, color: 'var(--mo-cyan)',    darken: '#007a85', height: 130 },
+      { player: top3[0], rank: 1, color: 'var(--mo-gold)',    darken: '#c89900', height: 190 },
+      { player: top3[2], rank: 3, color: 'var(--mo-magenta)', darken: '#7a1648', height: 95  },
+    ];
+    const medals = ['🥇', '🥈', '🥉'];
+    return (
+      <div className="mo-app" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden' }}>
+        <Stars />
+        <GridFloor />
+        {/* Spotlight */}
+        <div style={{ position: 'absolute', top: -80, left: '50%', transform: 'translateX(-50%)', width: 700, height: 600, background: 'radial-gradient(ellipse at top, rgba(255,214,10,0.22), rgba(255,45,149,0.1) 40%, transparent 65%)', pointerEvents: 'none' }} />
+
+        {/* Title */}
+        <div style={{ position: 'relative', zIndex: 2, textAlign: 'center', padding: '36px 20px 16px' }}>
+          <div style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 10, letterSpacing: '0.4em', color: 'var(--mo-ink-dim)' }}>━━ FIN DE PARTIE ━━</div>
+          <h1 className="mo-display mo-neon" style={{ margin: '10px 0 0', fontSize: 'clamp(2.8rem, 14vw, 5.5rem)', color: 'var(--mo-gold)' }}>PODIUM</h1>
+        </div>
+
+        {/* Podium steps */}
+        <div style={{ position: 'relative', zIndex: 2, display: 'flex', justifyContent: 'center', alignItems: 'flex-end', gap: 10, padding: '0 12px', flex: 1 }}>
+          {podiumSlots.map(({ player, rank, color, darken, height }, i) => {
+            const big = rank === 1;
+            const initials = (player?.pseudo || '?').slice(0, 2).toUpperCase();
+            return (
+              <div key={rank} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1, maxWidth: 130 }}>
+                {/* Avatar */}
+                <div style={{ position: 'relative', marginBottom: 10 }}>
+                  <div style={{ width: big ? 76 : 60, height: big ? 76 : 60, borderRadius: '50%', background: `radial-gradient(circle at 30% 25%, ${color}, ${darken})`, border: `2px solid ${color}`, boxShadow: `0 0 20px ${color}, inset 0 0 10px rgba(0,0,0,0.3)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--mo-font-display)', color: 'var(--mo-bg-0)', fontSize: big ? 20 : 16 }}>{initials}</div>
+                  <div style={{ position: 'absolute', top: -6, right: -6, width: 22, height: 22, borderRadius: '50%', background: 'var(--mo-bg-0)', border: `2px solid ${color}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--mo-font-display)', color, fontSize: 10, boxShadow: `0 0 8px ${color}` }}>{rank}</div>
+                </div>
+                <div className="mo-display" style={{ color, fontSize: big ? 15 : 12, textAlign: 'center', textShadow: `0 0 8px ${color}`, marginBottom: 3, wordBreak: 'break-word', maxWidth: '100%', padding: '0 4px' }}>{player?.pseudo || '?'}</div>
+                <div style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 9, color: 'var(--mo-ink-dim)', marginBottom: 10 }}>{(player?.score || 0)} pts</div>
+                {/* Step */}
+                <div style={{ width: '100%', height, background: `linear-gradient(180deg, ${color}35 0%, transparent 100%)`, border: `1.5px solid ${color}`, borderBottom: 'none', borderRadius: '8px 8px 0 0', boxShadow: `0 0 14px ${color}40`, position: 'relative', overflow: 'hidden' }}>
+                  <div style={{ position: 'absolute', top: big ? 10 : 6, left: 0, right: 0, textAlign: 'center', fontFamily: 'var(--mo-font-display)', fontSize: big ? 52 : 38, color: `${color}30` }}>{rank}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* 4th and below */}
+        {rest.length > 0 && (
+          <div style={{ position: 'relative', zIndex: 2, padding: '14px 20px 0', borderTop: '1px solid var(--mo-line)' }}>
+            {rest.map((player, i) => (
+              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0', borderBottom: '1px solid var(--mo-line)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span className="mo-display" style={{ fontSize: 11, color: 'var(--mo-ink-dim)', width: 24 }}>#{i + 4}</span>
+                  <span style={{ fontFamily: 'var(--mo-font-display)', fontSize: 13 }}>{player.pseudo}</span>
+                </div>
+                <span className="mo-display" style={{ fontSize: 13, color: 'var(--mo-ink-dim)' }}>{player.score} pts</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* CTA */}
+        <div style={{ position: 'relative', zIndex: 2, padding: '18px 20px 36px' }}>
+          <Btn variant="gold" onClick={handleRankingContinue} style={{ width: '100%' }}>
+            REJOUER UNE PARTIE →
+          </Btn>
+        </div>
+      </div>
+    );
+  }
+
   // ── JOINED — REVEAL (correct answer received) ─────────────
   if (joinStep === "joined" && correctAnswer) {
     const titleCorrect = submittedAnswer && isCorrect(submittedAnswer.title, correctAnswer.title);
@@ -629,6 +726,20 @@ export default function Player() {
                 letterSpacing: '0.2em', color: 'var(--mo-gold)',
               }}>
                 ⚡ PLUS RAPIDE · +1 PT BONUS
+              </div>
+            )}
+
+            {round3Bonus > 0 && (
+              <div style={{
+                display: 'inline-flex', alignItems: 'center', gap: 8,
+                padding: '6px 16px', borderRadius: 99,
+                background: 'rgba(255,214,10,0.12)',
+                border: '1px solid var(--mo-gold)',
+                boxShadow: '0 0 14px rgba(255,214,10,0.35)',
+                fontFamily: 'var(--mo-font-mono)', fontSize: 11,
+                letterSpacing: '0.2em', color: 'var(--mo-gold)',
+              }}>
+                {round3Bonus === 3 ? '🥇 1ER · +3 PTS BONUS' : round3Bonus === 2 ? '🥈 2ÈME · +2 PTS BONUS' : '🥉 3ÈME · +1 PT BONUS'}
               </div>
             )}
 
@@ -689,10 +800,10 @@ export default function Player() {
             </div>
 
             <div className="mo-display mo-neon" style={{ fontSize: 48, color: 'var(--mo-magenta)', lineHeight: 0.95 }}>
-              {submittedAnswer ? 'RATÉ !' : 'TEMPS !'}
+              {currentRound === 4 && !activeRound4 ? 'ÉLIMINÉ·E' : submittedAnswer ? 'RATÉ !' : 'TEMPS !'}
             </div>
             <div style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 10, letterSpacing: '0.25em', color: 'var(--mo-ink-dim)' }}>
-              {submittedAnswer ? 'ON SE REFAIT SUR LA PROCHAINE' : 'LE TEMPS EST ÉCOULÉ'}
+              {currentRound === 4 && !activeRound4 ? 'TU REJOINS LES SPECTATEURS' : submittedAnswer ? 'ON SE REFAIT SUR LA PROCHAINE' : 'LE TEMPS EST ÉCOULÉ'}
             </div>
 
             <Panel style={{ padding: 16, width: '100%', textAlign: 'left' }}>
