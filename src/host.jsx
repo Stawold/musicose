@@ -280,6 +280,7 @@ export default function Host() {
             const correctArtist = song.artist;
             let points = 0;
             let isFastestBonus = false;
+            let round3BonusAmount = 0;
             const round4Active = playersRef.current[sessionId]?.activeRound4 ?? true;
             const responseTime = resp.responseTime ? parseFloat(resp.responseTime) : null;
             resp.responseTime = responseTime;
@@ -303,10 +304,21 @@ export default function Host() {
               case 2:
                 if (isCorrect(playerTitle, correctTitle)) points = 2;
                 break;
-              case 3:
-                if (isCorrect(playerTitle, correctTitle) && isCorrect(playerArtist, correctArtist)) points = 3;
-                else if (isCorrect(playerTitle, correctTitle) || isCorrect(playerArtist, correctArtist)) points = 1;
+              case 3: {
+                if (isCorrect(playerTitle, correctTitle) && isCorrect(playerArtist, correctArtist)) {
+                  points = 3;
+                  const bonusOrder = bonusOrderRef.current[idx] || [];
+                  const position = bonusOrder.length;
+                  bonusOrderRef.current[idx] = [...bonusOrder, sessionId];
+                  if (position < 3) {
+                    round3BonusAmount = [3, 2, 1][position];
+                    points += round3BonusAmount;
+                  }
+                } else if (isCorrect(playerTitle, correctTitle) || isCorrect(playerArtist, correctArtist)) {
+                  points = 1;
+                }
                 break;
+              }
               case 4:
                 if (!round4Active) return;
                 if (isCorrect(playerTitle, correctTitle) && isCorrect(playerArtist, correctArtist)) points = 5;
@@ -314,6 +326,14 @@ export default function Host() {
                 break;
               default:
                 points = 0;
+            }
+
+            // Round 4 elimination: 0 pts on first miss → player is out
+            if (round === 4 && round4Active && points === 0) {
+              setPlayers(prev => prev[sessionId]
+                ? { ...prev, [sessionId]: { ...prev[sessionId], activeRound4: false } }
+                : prev);
+              conn.send({ type: "eliminatedRound4" });
             }
 
             if (points > 0) {
@@ -345,7 +365,7 @@ export default function Host() {
 
             resp.points = points;
             setResponses(prev => [...prev, { ...resp, playerId: sessionId }]);
-            conn.send({ type: "responseAck", points, fastest: isFastestBonus });
+            conn.send({ type: "responseAck", points, fastest: isFastestBonus, round3Bonus: round3BonusAmount });
           }
         } catch (e) {
           console.error("Erreur traitement data :", e);
