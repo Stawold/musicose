@@ -94,6 +94,7 @@ export default function Player() {
   const [correctAnswer, setCorrectAnswer] = useState(null);
   const [showRanking, setShowRanking] = useState(false);
   const [rankingData, setRankingData] = useState([]);
+  const [isFastest, setIsFastest] = useState(false);
   const [restoredScore, setRestoredScore] = useState(null);
   const [submittedAnswer, setSubmittedAnswer] = useState(null);
   const [totalScore, setTotalScore] = useState(0);
@@ -182,6 +183,7 @@ export default function Player() {
             setSubmittedAnswer(null);
             setTitle("");
             setArtist("");
+            setIsFastest(false);
             setSecondsLeft(data.seconds);
             setTotalSeconds(data.seconds);
             setCanPlay(true);
@@ -192,6 +194,7 @@ export default function Player() {
             if (typeof data.points === "number") {
               setTotalScore(prev => prev + data.points);
             }
+            if (data.fastest) setIsFastest(true);
           } else if (data.type === "sessionRestored") {
             setRestoredScore(data.totalScore);
             setTotalScore(data.totalScore || 0);
@@ -614,6 +617,20 @@ export default function Player() {
             <div style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 10, letterSpacing: '0.3em', color: 'var(--mo-cyan)' }}>
               {titleCorrect && artistCorrect ? 'TITRE + ARTISTE' : titleCorrect ? 'TITRE ✓' : 'ARTISTE ✓'} · {roundNames[currentRound - 1]}
             </div>
+
+            {isFastest && (
+              <div style={{
+                display: 'inline-flex', alignItems: 'center', gap: 8,
+                padding: '6px 16px', borderRadius: 99,
+                background: 'rgba(255,214,10,0.12)',
+                border: '1px solid var(--mo-gold)',
+                boxShadow: '0 0 14px rgba(255,214,10,0.35)',
+                fontFamily: 'var(--mo-font-mono)', fontSize: 11,
+                letterSpacing: '0.2em', color: 'var(--mo-gold)',
+              }}>
+                ⚡ PLUS RAPIDE · +1 PT BONUS
+              </div>
+            )}
 
             <Panel style={{ padding: 18, width: '100%' }}>
               <div style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 10, letterSpacing: '0.25em', color: 'var(--mo-ink-dim)' }}>LA RÉPONSE</div>

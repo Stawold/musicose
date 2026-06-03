@@ -71,6 +71,7 @@ export default function Host() {
   const [rankingSent, setRankingSent] = useState(false);
 
   const bonusOrderRef = useRef({});
+  const fastestRef = useRef(null);
   const audioRef = useRef(null);
   const playlistRef = useRef(playlist);
   const currentSongIndexRef = useRef(currentSongIndex);
@@ -278,6 +279,7 @@ export default function Host() {
             const correctTitle = song.title;
             const correctArtist = song.artist;
             let points = 0;
+            let isFastestBonus = false;
             const round4Active = playersRef.current[sessionId]?.activeRound4 ?? true;
             const responseTime = resp.responseTime ? parseFloat(resp.responseTime) : null;
             resp.responseTime = responseTime;
@@ -287,14 +289,15 @@ export default function Host() {
                 if (isCorrect(playerTitle, correctTitle) && isCorrect(playerArtist, correctArtist)) points = 3;
                 else if (isCorrect(playerTitle, correctTitle) || isCorrect(playerArtist, correctArtist)) points = 1;
                 if (points === 3 && responseTime !== null) {
-                  setFastest(prev => {
-                    if (!prev || responseTime < prev.time) {
-                      points += 1;
-                      setBonusWinnerId(sessionId);
-                      return { playerId: sessionId, time: responseTime };
-                    }
-                    return prev;
-                  });
+                  const currentFastest = fastestRef.current;
+                  if (!currentFastest || responseTime < currentFastest.time) {
+                    points += 1;
+                    isFastestBonus = true;
+                    const newFastest = { playerId: sessionId, time: responseTime };
+                    fastestRef.current = newFastest;
+                    setFastest(newFastest);
+                    setBonusWinnerId(sessionId);
+                  }
                 }
                 break;
               case 2:
@@ -342,7 +345,7 @@ export default function Host() {
 
             resp.points = points;
             setResponses(prev => [...prev, { ...resp, playerId: sessionId }]);
-            conn.send({ type: "responseAck", points });
+            conn.send({ type: "responseAck", points, fastest: isFastestBonus });
           }
         } catch (e) {
           console.error("Erreur traitement data :", e);
@@ -381,6 +384,7 @@ export default function Host() {
     setSecondsLeft(duration);
     setIsCounting(true);
     setFastest(null);
+    fastestRef.current = null;
     setResponses([]);
     setRevealed(false);
     setRankingSent(false);
@@ -434,6 +438,7 @@ export default function Host() {
       setIsCounting(false);
       setSecondsLeft(0);
       setFastest(null);
+      fastestRef.current = null;
       setRevealed(false);
       setRankingSent(false);
       setIsAudioPlaying(false);
@@ -448,6 +453,7 @@ export default function Host() {
       setIsCounting(false);
       setSecondsLeft(0);
       setFastest(null);
+      fastestRef.current = null;
       setIsAudioPlaying(false);
       if (audioRef.current) { audioRef.current.pause(); audioRef.current.currentTime = 0; }
     }
