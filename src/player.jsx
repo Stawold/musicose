@@ -247,6 +247,8 @@ export default function Player() {
   const handleRankingContinue = () => {
     if (conn) conn.send({ type: "rankingAcknowledged" });
     setShowRanking(false);
+    setCorrectAnswer(null);
+    setSubmittedAnswer(null);
   };
 
   const initials = pseudo ? pseudo.slice(0, 2).toUpperCase() : '?';

@@ -68,6 +68,7 @@ export default function Host() {
   const [totalSeconds, setTotalSeconds] = useState(0);
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
   const [revealed, setRevealed] = useState(false);
+  const [rankingSent, setRankingSent] = useState(false);
 
   const bonusOrderRef = useRef({});
   const audioRef = useRef(null);
@@ -382,6 +383,7 @@ export default function Host() {
     setFastest(null);
     setResponses([]);
     setRevealed(false);
+    setRankingSent(false);
     bonusOrderRef.current[currentSongIndex] = [];
     if (audioRef.current) {
       audioRef.current.src = `/playlists/${selectedPlaylist}/${songFile}`;
@@ -414,8 +416,6 @@ export default function Host() {
   const nextSong = () => {
     if (!playlist) return;
     if (currentSongIndex < playlist.songs.length - 1) {
-      if (isEndOfRound(currentSongIndex)) sendRankingToPlayers();
-
       const songToReveal = playlist.songs[currentSongIndex];
       if (songToReveal) {
         connections.forEach(c => {
@@ -435,6 +435,7 @@ export default function Host() {
       setSecondsLeft(0);
       setFastest(null);
       setRevealed(false);
+      setRankingSent(false);
       setIsAudioPlaying(false);
       if (audioRef.current) { audioRef.current.pause(); audioRef.current.currentTime = 0; }
     }
@@ -706,6 +707,17 @@ export default function Host() {
           >
             {revealed ? '✓ RÉPONSE RÉVÉLÉE' : '👁 RÉVÉLER LA RÉPONSE'}
           </Btn>
+
+          {/* Inter-round ranking — visible only at end of rounds 1, 2, 3 */}
+          {[29, 39, 69].includes(currentSongIndex) && (
+            <Btn
+              variant={rankingSent ? 'ghost' : 'cyan'}
+              onClick={() => { sendRankingToPlayers(); setRankingSent(true); }}
+              style={{ width: '100%' }}
+            >
+              {rankingSent ? '✓ CLASSEMENT ENVOYÉ' : '📊 MONTRER LE CLASSEMENT'}
+            </Btn>
+          )}
 
           {playlist && playlist.songs && currentSongIndex === playlist.songs.length - 1 && (
             <Btn variant="magenta" onClick={sendFinalRanking} style={{ width: '100%' }}>
