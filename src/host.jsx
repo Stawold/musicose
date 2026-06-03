@@ -69,6 +69,7 @@ export default function Host() {
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
   const [revealed, setRevealed] = useState(false);
   const [rankingSent, setRankingSent] = useState(false);
+  const [finalSent, setFinalSent] = useState(false);
 
   const bonusOrderRef = useRef({});
   const fastestRef = useRef(null);
@@ -168,9 +169,9 @@ export default function Host() {
   const sendFinalRanking = () => {
     const ranking = buildRanking();
     connections.forEach(conn => {
-      try { conn.send({ type: "showFinalRanking", ranking, wow: true }); } catch (e) { /* ignore */ }
+      try { conn.send({ type: "showFinalRanking", ranking }); } catch (e) { /* ignore */ }
     });
-    alert("Classement final envoyé aux joueurs !");
+    setFinalSent(true);
   };
 
   useEffect(() => {
@@ -746,8 +747,12 @@ export default function Host() {
           )}
 
           {playlist && playlist.songs && currentSongIndex === playlist.songs.length - 1 && (
-            <Btn variant="magenta" onClick={sendFinalRanking} style={{ width: '100%' }}>
-              🎉 Classement final
+            <Btn
+              variant={finalSent ? 'ghost' : 'gold'}
+              onClick={sendFinalRanking}
+              style={{ width: '100%' }}
+            >
+              {finalSent ? '✓ PODIUM ENVOYÉ' : '🏆 AFFICHER LE PODIUM FINAL'}
             </Btn>
           )}
         </div>

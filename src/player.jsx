@@ -440,7 +440,7 @@ export default function Player() {
   }
 
   // ── JOINED — WAITING ROOM ─────────────────────────────────
-  if (joinStep === "joined" && !canPlay && !correctAnswer && !showRanking && submittedAnswer === null) {
+  if (joinStep === "joined" && !canPlay && !correctAnswer && !showRanking && !showFinalRanking && submittedAnswer === null) {
     return (
       <div className="mo-app" style={{
         minHeight: '100vh', display: 'flex', flexDirection: 'column',
@@ -520,7 +520,7 @@ export default function Player() {
   }
 
   // ── JOINED — WAITING FOR REVEAL (submitted, host hasn't advanced yet) ─────────
-  if (joinStep === "joined" && submittedAnswer !== null && !correctAnswer && !canPlay && !showRanking) {
+  if (joinStep === "joined" && submittedAnswer !== null && !correctAnswer && !canPlay && !showRanking && !showFinalRanking) {
     return (
       <div className="mo-app" style={{ minHeight: '100vh', position: 'relative', overflow: 'hidden' }}>
         <Stars />
