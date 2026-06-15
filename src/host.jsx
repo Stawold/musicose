@@ -47,6 +47,9 @@ const isCorrect = (answer, correct) => {
   return dist <= maxDist;
 };
 
+const roundNames = ["Chansons en rafale", "Le Focus", "Fast and Musicous", "Le battle Royal d'Ose"];
+const ROUND_RANGES = { 1: [0, 29], 2: [30, 39], 3: [40, 69], 4: [70, 84] };
+
 export default function Host() {
   const [authenticated, setAuthenticated] = useState(false);
   const [passwordInput, setPasswordInput] = useState("");
@@ -70,6 +73,7 @@ export default function Host() {
   const [revealed, setRevealed] = useState(false);
   const [rankingSent, setRankingSent] = useState(false);
   const [finalSent, setFinalSent] = useState(false);
+  const [geConnections, setGeConnections] = useState([]);
 
   const bonusOrderRef = useRef({});
   const fastestRef = useRef(null);
@@ -86,6 +90,15 @@ export default function Host() {
   useEffect(() => { currentRoundRef.current = currentRound; }, [currentRound]);
   useEffect(() => { playersRef.current = players; }, [players]);
   useEffect(() => { shortCodeRef.current = shortCode; }, [shortCode]);
+
+  // Broadcast lobby state (code + player list) to grand écran(s)
+  useEffect(() => {
+    if (geConnections.length === 0) return;
+    const playerList = Object.values(players).map(p => ({ pseudo: p.pseudo, totalScore: p.totalScore || 0 }));
+    geConnections.forEach(conn => {
+      try { conn.send({ type: "lobbyState", shortCode: shortCodeRef.current, players: playerList }); } catch (e) { /* ignore */ }
+    });
+  }, [players, geConnections]);
 
   const HOST_PASSWORD = "melbose";
   const KVDB_BASE = "https://kvdb.io/GVkYCf2Kfn44jq3EYGweRj/";
@@ -143,6 +156,9 @@ export default function Host() {
     connections.forEach(conn => {
       try { conn.send({ type: "showRanking", ranking }); } catch (e) { /* ignore */ }
     });
+    geConnections.forEach(conn => {
+      try { conn.send({ type: "showRanking", ranking, round: currentRoundRef.current }); } catch (e) { /* ignore */ }
+    });
   };
 
   const isEndOfRound = (songIndex) => {
@@ -169,6 +185,9 @@ export default function Host() {
   const sendFinalRanking = () => {
     const ranking = buildRanking();
     connections.forEach(conn => {
+      try { conn.send({ type: "showFinalRanking", ranking }); } catch (e) { /* ignore */ }
+    });
+    geConnections.forEach(conn => {
       try { conn.send({ type: "showFinalRanking", ranking }); } catch (e) { /* ignore */ }
     });
     setFinalSent(true);
@@ -205,12 +224,18 @@ export default function Host() {
 
       conn.on("close", () => {
         setConnections(prev => prev.filter(c => c !== conn));
+        setGeConnections(prev => prev.filter(c => c !== conn));
       });
 
       conn.on("open", () => conn.send({ type: "welcome", message: "Bienvenue sur Music'Ose !" }));
 
       conn.on("data", (data) => {
         try {
+          if (data.type === "newGrandEcran") {
+            setGeConnections(prev => [...prev, conn]);
+            return;
+          }
+
           if (data.type === "newPlayer") {
             const sessionId = data.sessionId || conn.peer;
             peerToSession.current[conn.peer] = sessionId;
@@ -367,6 +392,10 @@ export default function Host() {
             resp.points = points;
             setResponses(prev => [...prev, { ...resp, playerId: sessionId }]);
             conn.send({ type: "responseAck", points, fastest: isFastestBonus, round3Bonus: round3BonusAmount });
+
+            geConnections.forEach(c => {
+              try { c.send({ type: "answersUpdate", count: responses.length + 1, total: Object.keys(playersRef.current).length }); } catch (e) { /* ignore */ }
+            });
           }
         } catch (e) {
           console.error("Erreur traitement data :", e);
@@ -401,6 +430,16 @@ export default function Host() {
     connections.forEach(conn =>
       conn.send({ type: "startTimer", seconds: duration, songIndex: currentSongIndex, round: currentRound })
     );
+    const [rangeStart, rangeEnd] = ROUND_RANGES[currentRound] || [0, 0];
+    geConnections.forEach(conn =>
+      conn.send({
+        type: "startTimer", seconds: duration, songIndex: currentSongIndex, round: currentRound,
+        roundName: roundNames[currentRound - 1] || '',
+        songNumber: currentSongIndex - rangeStart + 1,
+        totalInRound: rangeEnd - rangeStart + 1,
+        totalPlayers: Object.keys(playersRef.current).length,
+      })
+    );
     setTotalSeconds(duration);
     setSecondsLeft(duration);
     setIsCounting(true);
@@ -424,6 +463,30 @@ export default function Host() {
     connections.forEach(c => {
       try { c.send({ type: "revealAnswer", title: songToReveal.title, artist: songToReveal.artist }); } catch (e) {}
     });
+
+    if (geConnections.length > 0) {
+      let parfait = 0, bien = 0, rate = 0;
+      responses.forEach(r => {
+        const titleOk = isCorrect(r.title || '', songToReveal.title);
+        const artistOk = currentRound === 2 ? true : isCorrect(r.artist || '', songToReveal.artist);
+        if (titleOk && artistOk) parfait++;
+        else if (titleOk || (currentRound !== 2 && artistOk)) bien++;
+        else rate++;
+      });
+      const totalPlayers = Object.keys(playersRef.current).length;
+      const sans = Math.max(0, totalPlayers - responses.length);
+      geConnections.forEach(c => {
+        try {
+          c.send({
+            type: "revealAnswer",
+            title: songToReveal.title,
+            artist: songToReveal.artist,
+            stats: { parfait, bien, rate, sans },
+          });
+        } catch (e) { /* ignore */ }
+      });
+    }
+
     setRevealed(true);
   };
 
@@ -569,6 +632,17 @@ export default function Host() {
               </span>
             </>
           )}
+          <Btn
+            variant="cyan"
+            disabled={!shortCode}
+            onClick={() => {
+              const url = `${window.location.origin}${window.location.pathname}?screen=grand-ecran&code=${shortCode}`;
+              window.open(url, '_blank');
+            }}
+            style={{ fontSize: 12, padding: '8px 16px' }}
+          >
+            🖥️ GRAND ÉCRAN
+          </Btn>
         </div>
       </div>
 

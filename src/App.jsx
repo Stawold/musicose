@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Btn, Chip, Eyebrow, Stars, GridFloor, Eq } from "./components/MoUI";
 import Host from "./host";
 import Player from "./player";
+import GrandEcran from "./grandEcran";
 import "./styles/tokens.css";
 
 function RoleCard({ title, description, buttonLabel, variant, label, icon, onClick }) {
@@ -86,6 +87,10 @@ export default function App() {
     setMode("");
     localStorage.removeItem("musicose_mode");
   };
+
+  if (new URLSearchParams(window.location.search).get("screen") === "grand-ecran") {
+    return <GrandEcran />;
+  }
 
   if (mode === "host") {
     return (
