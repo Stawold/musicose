@@ -84,12 +84,14 @@ export default function Host() {
   const playersRef = useRef({});
   const shortCodeRef = useRef(null);
   const peerToSession = useRef({});
+  const responsesRef = useRef([]);
 
   useEffect(() => { playlistRef.current = playlist; }, [playlist]);
   useEffect(() => { currentSongIndexRef.current = currentSongIndex; }, [currentSongIndex]);
   useEffect(() => { currentRoundRef.current = currentRound; }, [currentRound]);
   useEffect(() => { playersRef.current = players; }, [players]);
   useEffect(() => { shortCodeRef.current = shortCode; }, [shortCode]);
+  useEffect(() => { responsesRef.current = responses; }, [responses]);
 
   // Broadcast lobby state (code + player list) to grand écran(s)
   useEffect(() => {
@@ -394,7 +396,7 @@ export default function Host() {
             conn.send({ type: "responseAck", points, fastest: isFastestBonus, round3Bonus: round3BonusAmount });
 
             geConnections.forEach(c => {
-              try { c.send({ type: "answersUpdate", count: responses.length + 1, total: Object.keys(playersRef.current).length }); } catch (e) { /* ignore */ }
+              try { c.send({ type: "answersUpdate", count: responsesRef.current.length + 1, total: Object.keys(playersRef.current).length }); } catch (e) { /* ignore */ }
             });
           }
         } catch (e) {

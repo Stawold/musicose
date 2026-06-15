@@ -675,7 +675,7 @@ export default function Player() {
   // ── JOINED — REVEAL (correct answer received) ─────────────
   if (joinStep === "joined" && correctAnswer) {
     const titleCorrect = submittedAnswer && isCorrect(submittedAnswer.title, correctAnswer.title);
-    const artistCorrect = submittedAnswer && isCorrect(submittedAnswer.artist, correctAnswer.artist);
+    const artistCorrect = submittedAnswer && currentRound !== 2 && isCorrect(submittedAnswer.artist, correctAnswer.artist);
     const gotPoints = submittedAnswer && (titleCorrect || artistCorrect);
 
     if (gotPoints) {
@@ -709,10 +709,10 @@ export default function Player() {
             </div>
 
             <div className="mo-display mo-neon" style={{ fontSize: 52, color: 'var(--mo-gold)', lineHeight: 0.9 }}>
-              {titleCorrect && artistCorrect ? 'PARFAIT !' : 'BRAVO !'}
+              {currentRound === 2 || (titleCorrect && artistCorrect) ? 'PARFAIT !' : 'BRAVO !'}
             </div>
             <div style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 10, letterSpacing: '0.3em', color: 'var(--mo-cyan)' }}>
-              {titleCorrect && artistCorrect ? 'TITRE + ARTISTE' : titleCorrect ? 'TITRE ✓' : 'ARTISTE ✓'} · {roundNames[currentRound - 1]}
+              {currentRound === 2 ? 'TITRE ✓' : titleCorrect && artistCorrect ? 'TITRE + ARTISTE' : titleCorrect ? 'TITRE ✓' : 'ARTISTE ✓'} · {roundNames[currentRound - 1]}
             </div>
 
             {isFastest && (

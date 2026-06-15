@@ -241,19 +241,17 @@ function ScreenLobby({ shortCode, players }) {
             </div>
           </div>
           <div style={{ transform: 'scale(2)', transformOrigin: 'right center' }}>
-            <Eq count={10} />
+            <Eq count={9} />
           </div>
         </div>
 
-        <div style={{ flex: 1, display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 24, alignContent: 'start', overflow: 'hidden' }}>
+        <div style={{ flex: 1, display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 24, alignContent: 'start', overflow: 'auto' }}>
           {players.map((p, i) => {
             const color = AVATAR_COLORS[i % AVATAR_COLORS.length];
             return (
               <div key={p.pseudo + i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
-                <div style={{ transform: 'scale(2)' }}>
-                  <Avatar initials={(p.pseudo || '?').slice(0, 2).toUpperCase()} color={color} size={44} />
-                </div>
-                <div style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 18, color: 'var(--mo-ink)', letterSpacing: '0.06em', maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 14 }}>
+                <Avatar initials={(p.pseudo || '?').slice(0, 2).toUpperCase()} color={color} size={88} />
+                <div style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 18, color: 'var(--mo-ink)', letterSpacing: '0.06em', maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {p.pseudo}
                 </div>
               </div>
@@ -317,9 +315,9 @@ function ScreenPlaying({ remaining, total, roundName, currentRound, songNumber, 
       {/* Bottom — listening + answers */}
       <div style={{ position: 'absolute', bottom: 80, left: 0, right: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 26 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 22 }}>
-          <div style={{ transform: 'scale(1.6)' }}><Eq count={16} /></div>
+          <div style={{ transform: 'scale(1.6)' }}><Eq count={9} /></div>
           <div className="mo-display mo-neon" style={{ fontSize: 56, color: 'var(--mo-magenta)' }}>ÇA JOUE…</div>
-          <div style={{ transform: 'scale(1.6)' }}><Eq count={16} /></div>
+          <div style={{ transform: 'scale(1.6)' }}><Eq count={9} /></div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <div style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 26, color: 'var(--mo-ink-dim)', letterSpacing: '0.15em' }}>RÉPONSES REÇUES</div>
