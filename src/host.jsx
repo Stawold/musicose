@@ -85,11 +85,15 @@ export default function Host() {
   const shortCodeRef = useRef(null);
   const peerToSession = useRef({});
   const responsesRef = useRef([]);
+  const secondsLeftRef = useRef(0);
+  const isCountingRef = useRef(false);
 
   useEffect(() => { playlistRef.current = playlist; }, [playlist]);
   useEffect(() => { currentSongIndexRef.current = currentSongIndex; }, [currentSongIndex]);
   useEffect(() => { currentRoundRef.current = currentRound; }, [currentRound]);
   useEffect(() => { playersRef.current = players; }, [players]);
+  useEffect(() => { secondsLeftRef.current = secondsLeft; }, [secondsLeft]);
+  useEffect(() => { isCountingRef.current = isCounting; }, [isCounting]);
   useEffect(() => { shortCodeRef.current = shortCode; }, [shortCode]);
   useEffect(() => { responsesRef.current = responses; }, [responses]);
 
@@ -242,6 +246,21 @@ export default function Host() {
             const sessionId = data.sessionId || conn.peer;
             peerToSession.current[conn.peer] = sessionId;
 
+            // If a song is currently playing, let the (re)joining player jump
+            // straight into it with the time remaining, instead of making
+            // them wait for the next song.
+            const sendCatchUpTimer = (eligible) => {
+              if (!eligible) return;
+              if (isCountingRef.current && secondsLeftRef.current > 0 && playlistRef.current) {
+                conn.send({
+                  type: "startTimer",
+                  seconds: secondsLeftRef.current,
+                  songIndex: currentSongIndexRef.current,
+                  round: currentRoundRef.current,
+                });
+              }
+            };
+
             const existingPlayer = playersRef.current[sessionId];
 
             if (existingPlayer) {
@@ -254,6 +273,7 @@ export default function Host() {
                 totalScore: existingPlayer.totalScore,
                 round: currentRoundRef.current,
               });
+              sendCatchUpTimer(currentRoundRef.current !== 4 || existingPlayer.activeRound4 !== false);
             } else {
               fetchScoreFromKvdb(sessionId).then(savedScore => {
                 if (savedScore) {
@@ -284,6 +304,7 @@ export default function Host() {
                     },
                   }));
                 }
+                sendCatchUpTimer(true);
               });
             }
             return;
