@@ -100,6 +100,8 @@ export default function Player() {
   const [restoredScore, setRestoredScore] = useState(null);
   const [submittedAnswer, setSubmittedAnswer] = useState(null);
   const [totalScore, setTotalScore] = useState(0);
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [joinError, setJoinError] = useState("");
 
   const KVDB_BASE = "https://kvdb.io/GVkYCf2Kfn44jq3EYGweRj/";
 
@@ -145,6 +147,7 @@ export default function Player() {
 
     if (joinStep === "code") {
       if (!codeInput.trim()) { alert("Entre un code !"); return; }
+      if (isConnecting) return;
 
       const finalSessionId = sessionId || generateSessionId();
       const finalPseudo = pseudo || pseudoInput.trim();
@@ -157,15 +160,37 @@ export default function Player() {
         avatarColor,
       }));
 
+      setJoinError("");
+      setIsConnecting(true);
+
       const newPeer = new Peer(undefined, peerConfig);
       setPeer(newPeer);
+
+      let settled = false;
+      const fail = (message) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeoutId);
+        setIsConnecting(false);
+        setJoinError(message);
+        try { newPeer.destroy(); } catch (e) { /* ignore */ }
+      };
+
+      const timeoutId = setTimeout(() => {
+        fail("⏱️ La connexion prend trop de temps. Vérifie ta connexion internet (Wi-Fi ou 4G/5G) et réessaie.");
+      }, 15000);
+
+      newPeer.on("error", (err) => {
+        console.error("Erreur PeerJS (joueur) :", err);
+        fail("❌ Connexion impossible. Vérifie ta connexion internet et réessaie.");
+      });
 
       newPeer.on("open", async () => {
         let realHostId = finalCode;
         if (finalCode.toUpperCase().startsWith("OSE-")) {
           const resolved = await resolveShortCode(finalCode.toUpperCase());
           if (!resolved) {
-            alert("❌ Code introuvable. Vérifie le code ou demande à l'hôte.");
+            fail("❌ Code introuvable. Vérifie le code ou demande à l'hôte.");
             return;
           }
           realHostId = resolved;
@@ -174,7 +199,16 @@ export default function Player() {
         const connection = newPeer.connect(realHostId);
         setConn(connection);
 
+        connection.on("error", (err) => {
+          console.error("Erreur connexion PeerJS (joueur) :", err);
+          fail("❌ Connexion impossible. Vérifie ta connexion internet et réessaie.");
+        });
+
         connection.on("open", () => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timeoutId);
+          setIsConnecting(false);
           connection.send({ type: "newPlayer", pseudo: finalPseudo, sessionId: finalSessionId });
           setJoinStep("joined");
         });
@@ -412,8 +446,19 @@ export default function Player() {
               </div>
             </div>
 
-            <Btn variant="cyan" onClick={handleJoinGame} style={{ width: '100%', fontSize: 15, padding: '16px 20px' }}>
-              ⚡ REJOINDRE
+            {joinError && (
+              <div style={{
+                padding: '10px 14px', borderRadius: 10,
+                border: '1px solid rgba(255,45,149,0.4)', background: 'rgba(255,45,149,0.08)',
+                color: 'var(--mo-magenta)', fontFamily: 'var(--mo-font-mono)', fontSize: 11,
+                lineHeight: 1.4, textAlign: 'center',
+              }}>
+                {joinError}
+              </div>
+            )}
+
+            <Btn variant="cyan" onClick={handleJoinGame} disabled={isConnecting} style={{ width: '100%', fontSize: 15, padding: '16px 20px', opacity: isConnecting ? 0.6 : 1 }}>
+              {isConnecting ? '⏳ CONNEXION…' : '⚡ REJOINDRE'}
             </Btn>
 
             <button
