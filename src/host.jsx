@@ -713,6 +713,7 @@ export default function Host() {
               <option value="playlist1">Playlist 1</option>
               <option value="playlist2">Playlist 2</option>
               <option value="playlist3">Playlist 3</option>
+              <option value="playlist4">Playlist 4</option>
             </select>
           </div>
 
