@@ -48,7 +48,7 @@ const isCorrect = (answer, correct) => {
 };
 
 const roundNames = ["Chansons en rafale", "Le Focus", "Fast and Musicous", "Le battle Royal d'Ose"];
-const ROUND_RANGES = { 1: [0, 29], 2: [30, 39], 3: [40, 69], 4: [70, 84] };
+const ROUND_RANGES = { 1: [0, 29], 2: [30, 39], 3: [40, 70], 4: [71, 85] };
 
 export default function Host() {
   const [authenticated, setAuthenticated] = useState(false);
@@ -168,7 +168,7 @@ export default function Host() {
   };
 
   const isEndOfRound = (songIndex) => {
-    return [29, 39, 69, 84].includes(songIndex);
+    return [29, 39, 70, 85].includes(songIndex);
   };
 
   useEffect(() => {
