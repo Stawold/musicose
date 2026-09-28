@@ -4,58 +4,13 @@ import { Btn, Panel, Chip, Eq, Eyebrow, Stars, Vinyl, Waveform } from "./compone
 import { peerConfig } from "./peerConfig";
 import "./styles/tokens.css";
 
-// Distance de Levenshtein
-const levenshtein = (a, b) => {
-  const matrix = Array.from({ length: b.length + 1 }, (_, i) => [i]);
-  for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
-  for (let i = 1; i <= b.length; i++) {
-    for (let j = 1; j <= a.length; j++) {
-      if (b[i - 1].toLowerCase() === a[j - 1].toLowerCase())
-        matrix[i][j] = matrix[i - 1][j - 1];
-      else
-        matrix[i][j] = Math.min(
-          matrix[i - 1][j] + 1,
-          matrix[i][j - 1] + 1,
-          matrix[i - 1][j - 1] + 1
-        );
-    }
-  }
-  return matrix[b.length][a.length];
-};
-
-const normalize = (s) => {
-  if (!s) return '';
-  return s
-    .trim()
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/[(\[{][^)\]{}]*[)\]{}]/g, ' ')
-    .replace(/[-''''.]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .replace(/^(the|les|le|la|l|un|une|a|an|des)\s+/i, '')
-    .trim();
-};
-
-const isCorrect = (answer, correct) => {
-  if (!answer || !correct) return false;
-  const a = normalize(answer);
-  const c = normalize(correct);
-  const dist = levenshtein(a, c);
-  const maxDist = Math.max(1, Math.floor(c.length * 0.15));
-  return dist <= maxDist;
-};
-
-// Artiste : nom complet OU nom de famille (dernier mot)
-const isArtistCorrect = (answer, correct) => {
-  if (isCorrect(answer, correct)) return true;
-  const words = normalize(correct).split(' ');
-  return words.length > 1 && isCorrect(answer, words[words.length - 1]);
-};
-
-const roundNames = ["Chansons en rafale", "Le Focus", "Fast and Musicous", "Le battle Royal d'Ose"];
-const ROUND_RANGES = { 1: [0, 29], 2: [30, 39], 3: [40, 70], 4: [71, 85] };
+import {
+  ROUND_NAMES as roundNames, ROUND_CONFIG, TOTAL_SONGS, MIC_CHOICES,
+  roundForIndex, isEndOfRound, isCorrect, isArtistCorrect,
+  scoreTextAnswer, round3BonusForPosition, scoreChoiceRound,
+  buildOptions, themeFor, adjustedScores, POINTS,
+} from "./gameLogic";
+import MicIcon from "./components/MicIcon";
 
 export default function Host() {
   const [authenticated, setAuthenticated] = useState(false);
@@ -81,6 +36,8 @@ export default function Host() {
   const [rankingSent, setRankingSent] = useState(false);
   const [finalSent, setFinalSent] = useState(false);
   const [geConnections, setGeConnections] = useState([]);
+  const [roundOptions, setRoundOptions] = useState(null); // manche 1 : { options, correctIndex }
+  const [audioCut, setAudioCut] = useState(false);        // manche 4 : musique coupée après 30 s
 
   const bonusOrderRef = useRef({});
   const fastestRef = useRef(null);
@@ -94,6 +51,15 @@ export default function Host() {
   const responsesRef = useRef([]);
   const secondsLeftRef = useRef(0);
   const isCountingRef = useRef(false);
+  const roundOptionsRef = useRef(null);
+  const choicesRef = useRef({});          // manche 1 : { sessionId: { index, time } }
+  const answeredRef = useRef({});         // manches 2-4 : une seule réponse par joueur et par chanson
+  const finalizedRef = useRef(-1);        // index de la chanson dont la manche 1 a été notée
+  const acceptUntilRef = useRef(0);       // petite marge après 0 s pour les choix en transit
+  const finalizeTimerRef = useRef(null);
+  const songPayloadRef = useRef({});      // infos à renvoyer aux joueurs qui (re)joignent en cours de chanson
+  const connBySessionRef = useRef({});
+  const geConnectionsRef = useRef([]);
 
   useEffect(() => { playlistRef.current = playlist; }, [playlist]);
   useEffect(() => { currentSongIndexRef.current = currentSongIndex; }, [currentSongIndex]);
@@ -103,6 +69,8 @@ export default function Host() {
   useEffect(() => { isCountingRef.current = isCounting; }, [isCounting]);
   useEffect(() => { shortCodeRef.current = shortCode; }, [shortCode]);
   useEffect(() => { responsesRef.current = responses; }, [responses]);
+  useEffect(() => { roundOptionsRef.current = roundOptions; }, [roundOptions]);
+  useEffect(() => { geConnectionsRef.current = geConnections; }, [geConnections]);
 
   // Broadcast lobby state (code + player list) to grand écran(s)
   useEffect(() => {
@@ -174,10 +142,6 @@ export default function Host() {
     });
   };
 
-  const isEndOfRound = (songIndex) => {
-    return [29, 39, 70, 85].includes(songIndex);
-  };
-
   useEffect(() => {
     fetch(`/playlists/${selectedPlaylist}/data.json`)
       .then(res => res.json())
@@ -188,6 +152,62 @@ export default function Host() {
       })
       .catch(err => console.error("Erreur chargement playlist :", err));
   }, [selectedPlaylist]);
+
+  // ── Scores ─────────────────────────────────────────────────
+  // Applique un delta au joueur (jamais sous 0), met à jour l'état, la sauvegarde KVDB et renvoie le joueur mis à jour.
+  const applyPoints = (sessionId, round, delta) => {
+    const cur = playersRef.current[sessionId];
+    if (!cur) return null;
+    const adj = adjustedScores(cur, round, delta);
+    if (!adj) return cur;
+    const updated = { ...cur, scorePerRound: adj.scorePerRound, totalScore: adj.totalScore };
+    playersRef.current = { ...playersRef.current, [sessionId]: updated };
+    setPlayers(prev => prev[sessionId] ? { ...prev, [sessionId]: { ...prev[sessionId], scorePerRound: adj.scorePerRound, totalScore: adj.totalScore } } : prev);
+    saveScoreToKvdb(sessionId, { pseudo: cur.pseudo, scorePerRound: adj.scorePerRound, totalScore: adj.totalScore });
+    return updated;
+  };
+
+  const sendToSession = (sessionId, message) => {
+    const c = connBySessionRef.current[sessionId];
+    if (!c) return;
+    try { c.send(message); } catch (e) { /* ignore */ }
+  };
+
+  // Outil de régulation : +1 / -1 manuel (bug, erreur de saisie, geste de l'animateur…)
+  const adjustScore = (sessionId, delta) => {
+    const updated = applyPoints(sessionId, currentRoundRef.current, delta);
+    if (updated) sendToSession(sessionId, { type: "scoreUpdate", totalScore: updated.totalScore });
+  };
+
+  const sendAnswersCount = (count) => {
+    // via ref : appelé depuis le gestionnaire PeerJS créé au premier rendu
+    geConnectionsRef.current.forEach(c => {
+      try { c.send({ type: "answersUpdate", count, total: Object.keys(playersRef.current).length }); } catch (e) { /* ignore */ }
+    });
+  };
+
+  // Manche 1 : notation à la fin du temps (les joueurs peuvent changer d'avis jusqu'au bout). Idempotent.
+  const finalizeRound1 = () => {
+    const idx = currentSongIndexRef.current;
+    const opts = roundOptionsRef.current;
+    if (currentRoundRef.current !== 1 || !opts || finalizedRef.current === idx) return;
+    finalizedRef.current = idx;
+    clearTimeout(finalizeTimerRef.current);
+
+    const results = scoreChoiceRound(choicesRef.current, opts.correctIndex);
+    Object.entries(results).forEach(([sid, r]) => {
+      const updated = r.points > 0 ? applyPoints(sid, 1, r.points) : playersRef.current[sid];
+      sendToSession(sid, {
+        type: "responseAck", points: r.points, fastest: r.fastest, correct: r.correct,
+        totalScore: updated ? updated.totalScore : undefined,
+      });
+      if (r.fastest) setBonusWinnerId(sid);
+    });
+    setResponses(prev => prev.map(r => {
+      const res = results[r.playerId];
+      return res ? { ...r, points: res.points, correct: res.correct } : r;
+    }));
+  };
 
   const buildRanking = () => {
     return Object.values(playersRef.current)
@@ -252,6 +272,7 @@ export default function Host() {
           if (data.type === "newPlayer") {
             const sessionId = data.sessionId || conn.peer;
             peerToSession.current[conn.peer] = sessionId;
+            connBySessionRef.current[sessionId] = conn;
 
             // If a song is currently playing, let the (re)joining player jump
             // straight into it with the time remaining, instead of making
@@ -264,6 +285,7 @@ export default function Host() {
                   seconds: secondsLeftRef.current,
                   songIndex: currentSongIndexRef.current,
                   round: currentRoundRef.current,
+                  ...songPayloadRef.current,
                 });
               }
             };
@@ -327,105 +349,70 @@ export default function Host() {
             if (!pl || !pl.songs || typeof idx !== "number") return;
 
             const song = pl.songs[idx];
-            const resp = data.response;
+            const resp = data.response || {};
             if (typeof resp.songIndex === "number" && resp.songIndex !== idx) return;
-
-            const playerTitle = (resp.title || "").trim();
-            const playerArtist = (resp.artist || "").trim();
-            const correctTitle = song.title;
-            const correctArtist = song.artist;
-            let points = 0;
-            let isFastestBonus = false;
-            let round3BonusAmount = 0;
-            const round4Active = playersRef.current[sessionId]?.activeRound4 ?? true;
             const responseTime = resp.responseTime ? parseFloat(resp.responseTime) : null;
             resp.responseTime = responseTime;
 
-            switch (round) {
-              case 1:
-                if (isCorrect(playerTitle, correctTitle) && isArtistCorrect(playerArtist, correctArtist)) points = 3;
-                else if (isCorrect(playerTitle, correctTitle) || isArtistCorrect(playerArtist, correctArtist)) points = 1;
-                if (points === 3 && responseTime !== null) {
-                  const currentFastest = fastestRef.current;
-                  if (!currentFastest || responseTime < currentFastest.time) {
-                    points += 1;
-                    isFastestBonus = true;
-                    const newFastest = { playerId: sessionId, time: responseTime };
-                    fastestRef.current = newFastest;
-                    setFastest(newFastest);
-                    setBonusWinnerId(sessionId);
-                  }
-                }
-                break;
-              case 2:
-                if (isCorrect(playerTitle, correctTitle)) points = 2;
-                break;
-              case 3: {
-                if (isCorrect(playerTitle, correctTitle) && isArtistCorrect(playerArtist, correctArtist)) {
-                  points = 3;
-                  const bonusOrder = bonusOrderRef.current[idx] || [];
-                  const position = bonusOrder.length;
-                  bonusOrderRef.current[idx] = [...bonusOrder, sessionId];
-                  if (position < 3) {
-                    round3BonusAmount = [3, 2, 1][position];
-                    points += round3BonusAmount;
-                  }
-                } else if (isCorrect(playerTitle, correctTitle) || isArtistCorrect(playerArtist, correctArtist)) {
-                  points = 1;
-                }
-                break;
-              }
-              case 4:
-                if (!round4Active) return;
-                if (isCorrect(playerTitle, correctTitle) && isArtistCorrect(playerArtist, correctArtist)) points = 5;
-                else if (isCorrect(playerTitle, correctTitle) || isArtistCorrect(playerArtist, correctArtist)) points = 2;
-                break;
-              default:
-                points = 0;
+            // ── Manche 1 : QCM — le dernier choix compte, notation à la fin du temps ──
+            if (round === 1) {
+              const open = finalizedRef.current !== idx && (isCountingRef.current || Date.now() < acceptUntilRef.current);
+              const opts = roundOptionsRef.current;
+              const i = resp.choiceIndex;
+              if (!open || !opts || !Number.isInteger(i) || i < 0 || i >= opts.options.length) return;
+              choicesRef.current[sessionId] = { index: i, time: responseTime };
+              const chosen = opts.options[i];
+              setResponses(prev => [
+                ...prev.filter(r => r.playerId !== sessionId),
+                { ...resp, title: chosen.title, artist: chosen.artist, choiceIndex: i, playerId: sessionId },
+              ]);
+              sendAnswersCount(Object.keys(choicesRef.current).length);
+              return;
             }
 
-            // Round 4 elimination: 0 pts on first miss → player is out
-            if (round === 4 && round4Active && points === 0) {
+            // ── Manches 2 à 4 : réponse saisie, une seule par chanson ──
+            const round4Active = playersRef.current[sessionId]?.activeRound4 ?? true;
+            if (round === 4 && !round4Active) return;
+            if (answeredRef.current[sessionId]) return;
+            answeredRef.current[sessionId] = true;
+
+            const result = scoreTextAnswer(round, { title: (resp.title || "").trim(), artist: (resp.artist || "").trim() }, song);
+            let points = result.points;
+            let isFastestBonus = false;
+            let round3BonusAmount = 0;
+
+            if (round === 2 && points > 0 && !fastestRef.current) {
+              points += POINTS.round2FastestBonus;
+              isFastestBonus = true;
+              fastestRef.current = { playerId: sessionId, time: responseTime };
+              setFastest(fastestRef.current);
+              setBonusWinnerId(sessionId);
+            }
+
+            if (round === 3 && result.both) {
+              const bonusOrder = bonusOrderRef.current[idx] || [];
+              bonusOrderRef.current[idx] = [...bonusOrder, sessionId];
+              round3BonusAmount = round3BonusForPosition(bonusOrder.length);
+              points += round3BonusAmount;
+            }
+
+            // Manche 4 : aucune bonne réponse → éliminé
+            if (round === 4 && result.points === 0) {
               setPlayers(prev => prev[sessionId]
                 ? { ...prev, [sessionId]: { ...prev[sessionId], activeRound4: false } }
                 : prev);
               conn.send({ type: "eliminatedRound4" });
             }
 
-            if (points > 0) {
-              const currentPlayer = playersRef.current[sessionId];
-              if (currentPlayer) {
-                const newScorePerRound = [...currentPlayer.scorePerRound];
-                newScorePerRound[round - 1] = (newScorePerRound[round - 1] || 0) + points;
-                const newTotalScore = (currentPlayer.totalScore || 0) + points;
-
-                setPlayers(prev => {
-                  const updated = { ...prev };
-                  if (updated[sessionId]) {
-                    updated[sessionId] = {
-                      ...updated[sessionId],
-                      scorePerRound: newScorePerRound,
-                      totalScore: newTotalScore,
-                    };
-                  }
-                  return updated;
-                });
-
-                saveScoreToKvdb(sessionId, {
-                  pseudo: currentPlayer.pseudo,
-                  scorePerRound: newScorePerRound,
-                  totalScore: newTotalScore,
-                });
-              }
-            }
+            const updated = points > 0 ? applyPoints(sessionId, round, points) : playersRef.current[sessionId];
 
             resp.points = points;
             setResponses(prev => [...prev, { ...resp, playerId: sessionId }]);
-            conn.send({ type: "responseAck", points, fastest: isFastestBonus, round3Bonus: round3BonusAmount });
-
-            geConnections.forEach(c => {
-              try { c.send({ type: "answersUpdate", count: responsesRef.current.length + 1, total: Object.keys(playersRef.current).length }); } catch (e) { /* ignore */ }
+            conn.send({
+              type: "responseAck", points, fastest: isFastestBonus, round3Bonus: round3BonusAmount,
+              totalScore: updated ? updated.totalScore : undefined,
             });
+            sendAnswersCount(responsesRef.current.length + 1);
           }
         } catch (e) {
           console.error("Erreur traitement data :", e);
@@ -444,40 +431,87 @@ export default function Host() {
       return () => clearTimeout(timer);
     } else if (secondsLeft === 0 && isCounting) {
       setIsCounting(false);
+      if (currentRoundRef.current === 1) {
+        // marge pour les derniers choix en transit, puis notation
+        acceptUntilRef.current = Date.now() + 1500;
+        clearTimeout(finalizeTimerRef.current);
+        finalizeTimerRef.current = setTimeout(finalizeRound1, 1600);
+      }
     }
   }, [secondsLeft, isCounting]);
 
+  // Manche 4 : les joueurs ont 45 s pour répondre mais n'entendent la chanson que 30 s
+  useEffect(() => {
+    if (!isCounting || currentRound !== 4 || audioCut) return;
+    if (totalSeconds - secondsLeft >= ROUND_CONFIG[4].audio) {
+      setAudioCut(true);
+      if (audioRef.current) audioRef.current.pause();
+      setIsAudioPlaying(false);
+    }
+  }, [secondsLeft, isCounting, currentRound, totalSeconds, audioCut]);
+
+  // Remet à zéro l'état d'une chanson (lancement, changement de chanson)
+  const resetSongState = () => {
+    clearTimeout(finalizeTimerRef.current);
+    choicesRef.current = {};
+    answeredRef.current = {};
+    finalizedRef.current = -1;
+    acceptUntilRef.current = 0;
+    songPayloadRef.current = {};
+    setAudioCut(false);
+    setResponses([]);
+    setFastest(null);
+    fastestRef.current = null;
+    setRevealed(false);
+    setRankingSent(false);
+  };
+
   const startSong = () => {
     if (!playlist || !playlist.songs) return;
-    const songFile = playlist.songs[currentSongIndex]?.file;
-    const duration = currentRound === 1 ? 30 : currentRound === 2 ? 25 : currentRound === 3 ? 20 : 20;
+    const song = playlist.songs[currentSongIndex];
+    const songFile = song?.file;
+    const cfg = ROUND_CONFIG[currentRound];
+    const duration = cfg.seconds;
 
     if (!songFile) {
       alert("Fichier audio manquant pour cette chanson");
       return;
     }
 
+    resetSongState();
+
+    // Infos propres à la manche (les téléphones ne reçoivent jamais les titres des propositions)
+    const extra = { audioSeconds: cfg.audio };
+    let geExtra = {};
+    if (currentRound === 1) {
+      const built = buildOptions(playlist.songs, currentSongIndex);
+      roundOptionsRef.current = built;
+      setRoundOptions(built);
+      extra.optionCount = built.options.length;
+      geExtra = { options: built.options };
+    } else {
+      roundOptionsRef.current = null;
+      setRoundOptions(null);
+      if (currentRound === 2) extra.theme = themeFor(song);
+    }
+    songPayloadRef.current = extra;
+
     connections.forEach(conn =>
-      conn.send({ type: "startTimer", seconds: duration, songIndex: currentSongIndex, round: currentRound })
+      conn.send({ type: "startTimer", seconds: duration, songIndex: currentSongIndex, round: currentRound, ...extra })
     );
-    const [rangeStart, rangeEnd] = ROUND_RANGES[currentRound] || [0, 0];
     geConnections.forEach(conn =>
       conn.send({
         type: "startTimer", seconds: duration, songIndex: currentSongIndex, round: currentRound,
         roundName: roundNames[currentRound - 1] || '',
-        songNumber: currentSongIndex - rangeStart + 1,
-        totalInRound: rangeEnd - rangeStart + 1,
+        songNumber: currentSongIndex - cfg.start + 1,
+        totalInRound: cfg.end - cfg.start + 1,
         totalPlayers: Object.keys(playersRef.current).length,
+        ...extra, ...geExtra,
       })
     );
     setTotalSeconds(duration);
     setSecondsLeft(duration);
     setIsCounting(true);
-    setFastest(null);
-    fastestRef.current = null;
-    setResponses([]);
-    setRevealed(false);
-    setRankingSent(false);
     bonusOrderRef.current[currentSongIndex] = [];
     if (audioRef.current) {
       audioRef.current.src = `/playlists/${selectedPlaylist}/${songFile}`;
@@ -490,11 +524,24 @@ export default function Host() {
   const revealCurrentSong = () => {
     const songToReveal = playlist?.songs?.[currentSongIndex];
     if (!songToReveal) return;
-    connections.forEach(c => {
-      try { c.send({ type: "revealAnswer", title: songToReveal.title, artist: songToReveal.artist }); } catch (e) {}
-    });
+    const totalPlayers = Object.keys(playersRef.current).length;
 
-    if (geConnections.length > 0) {
+    let playerExtra = {};
+    let geExtra = {};
+    let stats;
+
+    if (currentRound === 1 && roundOptionsRef.current) {
+      // Notation immédiate (sans attendre la marge de fin de temps)
+      acceptUntilRef.current = 0;
+      finalizeRound1();
+      const { options, correctIndex } = roundOptionsRef.current;
+      const votes = options.map(() => 0);
+      Object.values(choicesRef.current).forEach(c => { votes[c.index] += 1; });
+      const totalVotes = votes.reduce((a, b) => a + b, 0);
+      playerExtra = { correctIndex };
+      geExtra = { correctIndex, options, votes };
+      stats = { parfait: votes[correctIndex], rate: totalVotes - votes[correctIndex], sans: Math.max(0, totalPlayers - totalVotes) };
+    } else {
       let parfait = 0, bien = 0, rate = 0;
       responses.forEach(r => {
         const titleOk = isCorrect(r.title || '', songToReveal.title);
@@ -503,19 +550,15 @@ export default function Host() {
         else if (titleOk || (currentRound !== 2 && artistOk)) bien++;
         else rate++;
       });
-      const totalPlayers = Object.keys(playersRef.current).length;
-      const sans = Math.max(0, totalPlayers - responses.length);
-      geConnections.forEach(c => {
-        try {
-          c.send({
-            type: "revealAnswer",
-            title: songToReveal.title,
-            artist: songToReveal.artist,
-            stats: { parfait, bien, rate, sans },
-          });
-        } catch (e) { /* ignore */ }
-      });
+      stats = { parfait, bien, rate, sans: Math.max(0, totalPlayers - responses.length) };
     }
+
+    connections.forEach(c => {
+      try { c.send({ type: "revealAnswer", title: songToReveal.title, artist: songToReveal.artist, ...playerExtra }); } catch (e) {}
+    });
+    geConnections.forEach(c => {
+      try { c.send({ type: "revealAnswer", title: songToReveal.title, artist: songToReveal.artist, stats, ...geExtra }); } catch (e) { /* ignore */ }
+    });
 
     setRevealed(true);
   };
@@ -531,45 +574,37 @@ export default function Host() {
     }
   };
 
-  const nextSong = () => {
-    if (!playlist) return;
-    if (currentSongIndex < playlist.songs.length - 1) {
-      const songToReveal = playlist.songs[currentSongIndex];
-      if (songToReveal) {
-        connections.forEach(c => {
-          try { c.send({ type: "revealAnswer", title: songToReveal.title, artist: songToReveal.artist }); } catch (e) {}
-        });
-      }
+  const lastSongIndex = playlist && playlist.songs ? Math.min(playlist.songs.length - 1, ROUND_CONFIG[4].end) : 0;
 
-      const newSongIndex = currentSongIndex + 1;
-      let newRound = currentRound;
-      if (newSongIndex === 30) newRound = 2;
-      if (newSongIndex === 40) newRound = 3;
-      if (newSongIndex === 70) newRound = 4;
-      setCurrentRound(newRound);
-      setCurrentSongIndex(newSongIndex);
-      setResponses([]);
-      setIsCounting(false);
-      setSecondsLeft(0);
-      setFastest(null);
-      fastestRef.current = null;
-      setRevealed(false);
-      setRankingSent(false);
-      setIsAudioPlaying(false);
-      if (audioRef.current) { audioRef.current.pause(); audioRef.current.currentTime = 0; }
+  const goToSong = (newSongIndex) => {
+    setCurrentRound(roundForIndex(newSongIndex));
+    setCurrentSongIndex(newSongIndex);
+    resetSongState();
+    setRoundOptions(null);
+    roundOptionsRef.current = null;
+    setIsCounting(false);
+    setSecondsLeft(0);
+    setIsAudioPlaying(false);
+    if (audioRef.current) { audioRef.current.pause(); audioRef.current.currentTime = 0; }
+  };
+
+  const nextSong = () => {
+    if (!playlist || currentSongIndex >= lastSongIndex) return;
+    finalizeRound1();
+    const songToReveal = playlist.songs[currentSongIndex];
+    if (songToReveal) {
+      const correctIndex = currentRound === 1 && roundOptionsRef.current ? { correctIndex: roundOptionsRef.current.correctIndex } : {};
+      connections.forEach(c => {
+        try { c.send({ type: "revealAnswer", title: songToReveal.title, artist: songToReveal.artist, ...correctIndex }); } catch (e) {}
+      });
     }
+    goToSong(currentSongIndex + 1);
   };
 
   const previousSong = () => {
     if (currentSongIndex > 0) {
-      setCurrentSongIndex(i => i - 1);
-      setResponses([]);
-      setIsCounting(false);
-      setSecondsLeft(0);
-      setFastest(null);
-      fastestRef.current = null;
-      setIsAudioPlaying(false);
-      if (audioRef.current) { audioRef.current.pause(); audioRef.current.currentTime = 0; }
+      finalizeRound1();
+      goToSong(currentSongIndex - 1);
     }
   };
 
@@ -613,7 +648,17 @@ export default function Host() {
   // ── RÉGIE HÔTE ────────────────────────────────────────────
   const waveformProgress = totalSeconds > 0 ? 1 - (secondsLeft / totalSeconds) : 0;
 
+  const adjustBtnStyle = (color) => ({
+    background: 'transparent', color, border: `1px solid ${color}`, borderRadius: 6,
+    fontFamily: 'var(--mo-font-mono)', fontSize: 10, padding: '2px 6px', cursor: 'pointer',
+  });
+
   const getResponsePalette = (r) => {
+    if (r.choiceIndex !== undefined) {
+      const mic = MIC_CHOICES[r.choiceIndex];
+      if (r.points === undefined) return { c: mic.color, label: `CHOIX ${mic.letter}` };
+      return r.correct ? { c: 'var(--mo-cyan)', label: 'BONNE RÉPONSE' } : { c: 'rgba(255,255,255,0.15)', label: 'RATÉ' };
+    }
     if (r.points === undefined) return { c: 'rgba(255,45,149,0.3)', label: 'EN ATTENTE' };
     if (r.points === 0) return { c: 'rgba(255,255,255,0.15)', label: 'RATÉ' };
     const titleOk = isCorrect(r.title || '', currentSong?.title || '');
@@ -649,8 +694,13 @@ export default function Host() {
           )}
           {shortCode && <Chip>CODE · {shortCode}</Chip>}
           <Chip>{Object.keys(players).length} JOUEUR·SES</Chip>
+          {playlist && playlist.songs && playlist.songs.length !== TOTAL_SONGS && (
+            <span title={`Le jeu attend ${TOTAL_SONGS} chansons (15 + 15 + 25 + 10)`} style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 11, color: 'var(--mo-gold)' }}>
+              ⚠ {playlist.songs.length}/{TOTAL_SONGS} CHANSONS
+            </span>
+          )}
           <span style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 11, color: 'var(--mo-ink-dim)', letterSpacing: '0.1em' }}>
-            MANCHE {currentRound} · CHANSON {currentSongIndex + 1}{playlist ? `/${playlist.songs.length}` : ''}
+            MANCHE {currentRound} · CHANSON {currentSongIndex - ROUND_CONFIG[currentRound].start + 1}/{ROUND_CONFIG[currentRound].end - ROUND_CONFIG[currentRound].start + 1}
           </span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
@@ -794,6 +844,37 @@ export default function Host() {
                 <div style={{ fontFamily: 'var(--mo-font-display)', fontSize: 14, color: 'var(--mo-cyan)', letterSpacing: '0.05em' }}>
                   {currentSong.artist.toUpperCase()}
                 </div>
+                {currentRound === 2 && (
+                  <div style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 11, color: 'var(--mo-gold)', letterSpacing: '0.15em', marginTop: 6 }}>
+                    THÈME AFFICHÉ : {themeFor(currentSong).toUpperCase()}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Manche 1 : les 4 propositions tirées pour cette chanson */}
+            {currentRound === 1 && roundOptions && (
+              <div style={{ width: '100%', maxWidth: 480, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {roundOptions.options.map((o, i) => {
+                  const mic = MIC_CHOICES[i];
+                  const isRight = i === roundOptions.correctIndex;
+                  const votes = responses.filter(r => r.choiceIndex === i).length;
+                  return (
+                    <div key={i} style={{
+                      display: 'flex', alignItems: 'center', gap: 8, padding: '4px 8px', borderRadius: 8,
+                      border: `1px solid ${isRight ? mic.color : 'var(--mo-line)'}`,
+                      background: isRight ? 'rgba(255,255,255,0.05)' : 'transparent',
+                    }}>
+                      <MicIcon color={mic.color} size={20} />
+                      <span className="mo-display" style={{ fontSize: 11, color: mic.color, width: 12 }}>{mic.letter}</span>
+                      <span style={{ flex: 1, minWidth: 0, fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {o.title} <span style={{ color: 'var(--mo-ink-dim)' }}>· {o.artist}</span>
+                      </span>
+                      {isRight && <span style={{ fontSize: 10, color: 'var(--mo-cyan)' }}>✓ BONNE</span>}
+                      <span className="mo-display" style={{ fontSize: 11, color: 'var(--mo-ink-dim)' }}>{votes}</span>
+                    </div>
+                  );
+                })}
               </div>
             )}
 
@@ -809,7 +890,7 @@ export default function Host() {
               }}>
                 <span>{totalSeconds - secondsLeft > 0 ? `${totalSeconds - secondsLeft}s` : '0s'}</span>
                 {isCounting
-                  ? <span style={{ color: 'var(--mo-gold)' }}>● RÉPONSES OUVERTES</span>
+                  ? <span style={{ color: 'var(--mo-gold)' }}>{audioCut ? '🔇 MUSIQUE COUPÉE · RÉPONSES OUVERTES' : '● RÉPONSES OUVERTES'}</span>
                   : <span>EN ATTENTE</span>
                 }
                 <span>{totalSeconds > 0 ? `${totalSeconds}s` : '—'}</span>
@@ -824,7 +905,7 @@ export default function Host() {
             {isAudioPlaying && (
               <Btn variant="ghost" onClick={togglePause} style={{ width: 48, height: 48, padding: 0, borderRadius: 999, flexShrink: 0 }}>⏸</Btn>
             )}
-            {!isAudioPlaying && isCounting && (
+            {!isAudioPlaying && isCounting && !audioCut && (
               <Btn variant="cyan" onClick={togglePause} style={{ width: 48, height: 48, padding: 0, borderRadius: 999, flexShrink: 0 }}>▶</Btn>
             )}
             <Btn variant="ghost" onClick={nextSong} style={{ width: 48, height: 48, padding: 0, borderRadius: 999, flexShrink: 0 }}>▶▶</Btn>
@@ -840,8 +921,8 @@ export default function Host() {
             {revealed ? '✓ RÉPONSE RÉVÉLÉE' : '👁 RÉVÉLER LA RÉPONSE'}
           </Btn>
 
-          {/* Inter-round ranking — visible only at end of rounds 1, 2, 3 */}
-          {[29, 39, 69].includes(currentSongIndex) && (
+          {/* Classement intermédiaire — visible uniquement à la fin des manches 1, 2 et 3 */}
+          {isEndOfRound(currentSongIndex) && (
             <Btn
               variant={rankingSent ? 'ghost' : 'cyan'}
               onClick={() => { sendRankingToPlayers(); setRankingSent(true); }}
@@ -851,7 +932,7 @@ export default function Host() {
             </Btn>
           )}
 
-          {playlist && playlist.songs && currentSongIndex === playlist.songs.length - 1 && (
+          {playlist && playlist.songs && currentSongIndex === lastSongIndex && (
             <Btn
               variant={finalSent ? 'ghost' : 'gold'}
               onClick={sendFinalRanking}
@@ -923,7 +1004,7 @@ export default function Host() {
             flexShrink: 0,
           }}>
             <span style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 10, letterSpacing: '0.2em', color: 'var(--mo-ink-dim)' }}>
-              SCORES
+              SCORES · AJUSTEMENT MANUEL (manche {currentRound})
             </span>
           </div>
 
@@ -950,7 +1031,19 @@ export default function Host() {
                       }}>#{i + 1}</span>
                       <span style={{ fontFamily: 'var(--mo-font-display)', fontSize: 12 }}>{p.pseudo}</span>
                     </div>
-                    <span className="mo-display" style={{ fontSize: 14, color: 'var(--mo-gold)' }}>{p.totalScore}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <button
+                        title={`Retirer 1 point à ${p.pseudo}`}
+                        onClick={() => adjustScore(id, -1)}
+                        style={adjustBtnStyle('var(--mo-magenta)')}
+                      >−1</button>
+                      <span className="mo-display" style={{ fontSize: 14, color: 'var(--mo-gold)', minWidth: 26, textAlign: 'center' }}>{p.totalScore}</span>
+                      <button
+                        title={`Ajouter 1 point à ${p.pseudo}`}
+                        onClick={() => adjustScore(id, 1)}
+                        style={adjustBtnStyle('var(--mo-cyan)')}
+                      >+1</button>
+                    </div>
                   </div>
                 ))
             )}

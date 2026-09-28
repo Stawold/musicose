@@ -4,57 +4,10 @@ import { Btn, Input, Panel, Eyebrow, Chip, Eq, Stars, GridFloor } from "./compon
 import { peerConfig } from "./peerConfig";
 import "./styles/tokens.css";
 
-// Distance de Levenshtein
-const levenshtein = (a, b) => {
-  const matrix = Array.from({ length: b.length + 1 }, (_, i) => [i]);
-  for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
-  for (let i = 1; i <= b.length; i++) {
-    for (let j = 1; j <= a.length; j++) {
-      if (b[i - 1].toLowerCase() === a[j - 1].toLowerCase())
-        matrix[i][j] = matrix[i - 1][j - 1];
-      else
-        matrix[i][j] = Math.min(
-          matrix[i - 1][j] + 1,
-          matrix[i][j - 1] + 1,
-          matrix[i - 1][j - 1] + 1
-        );
-    }
-  }
-  return matrix[b.length][a.length];
-};
-
-const normalize = (s) => {
-  if (!s) return '';
-  return s
-    .trim()
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/[(\[{][^)\]{}]*[)\]{}]/g, ' ')
-    .replace(/[-''''.]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .replace(/^(the|les|le|la|l|un|une|a|an|des)\s+/i, '')
-    .trim();
-};
-
-const isCorrect = (answer, correct) => {
-  if (!answer || !correct) return false;
-  const a = normalize(answer);
-  const c = normalize(correct);
-  const dist = levenshtein(a, c);
-  const maxDist = Math.max(1, Math.floor(c.length * 0.15));
-  return dist <= maxDist;
-};
-
-// Artiste : nom complet OU nom de famille (dernier mot)
-const isArtistCorrect = (answer, correct) => {
-  if (isCorrect(answer, correct)) return true;
-  const words = normalize(correct).split(' ');
-  return words.length > 1 && isCorrect(answer, words[words.length - 1]);
-};
-
-const roundNames = ["Chansons en rafale", "Le Focus", "Fast and Musicous", "Le battle Royal d'Ose"];
+import {
+  ROUND_NAMES as roundNames, MIC_CHOICES, isCorrect, isArtistCorrect,
+} from "./gameLogic";
+import MicIcon from "./components/MicIcon";
 
 const generateSessionId = () => {
   if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
@@ -109,6 +62,10 @@ export default function Player() {
   const [totalScore, setTotalScore] = useState(0);
   const [isConnecting, setIsConnecting] = useState(false);
   const [joinError, setJoinError] = useState("");
+  const [choice, setChoice] = useState(null);           // manche 1 : micro choisi (modifiable jusqu'à la fin)
+  const [optionCount, setOptionCount] = useState(4);
+  const [theme, setTheme] = useState("");               // manche 2
+  const [audioSeconds, setAudioSeconds] = useState(null); // manche 4 : durée d'écoute
 
   const KVDB_BASE = "https://kvdb.io/GVkYCf2Kfn44jq3EYGweRj/";
 
@@ -222,10 +179,15 @@ export default function Player() {
 
         connection.on("data", (data) => {
           if (data.type === "startTimer") {
+            setShowRanking(false);   // une nouvelle chanson ferme le classement resté ouvert
             setCorrectAnswer(null);
             setSubmittedAnswer(null);
             setTitle("");
             setArtist("");
+            setChoice(null);
+            setOptionCount(typeof data.optionCount === "number" ? data.optionCount : 4);
+            setTheme(data.theme || "");
+            setAudioSeconds(typeof data.audioSeconds === "number" ? data.audioSeconds : null);
             setIsFastest(false);
             setRound3Bonus(0);
             setSecondsLeft(data.seconds);
@@ -235,18 +197,22 @@ export default function Player() {
             if (typeof data.round === "number") setCurrentRound(data.round);
             setRoundStartTime(Date.now());
           } else if (data.type === "responseAck") {
-            if (typeof data.points === "number") {
+            if (typeof data.totalScore === "number") {
+              setTotalScore(data.totalScore);   // total fait foi côté hôte
+            } else if (typeof data.points === "number") {
               setTotalScore(prev => prev + data.points);
             }
             if (data.fastest) setIsFastest(true);
             if (data.round3Bonus > 0) setRound3Bonus(data.round3Bonus);
+          } else if (data.type === "scoreUpdate") {
+            if (typeof data.totalScore === "number") setTotalScore(data.totalScore);
           } else if (data.type === "sessionRestored") {
             setRestoredScore(data.totalScore);
             setTotalScore(data.totalScore || 0);
           } else if (data.type === "eliminatedRound4") {
             setActiveRound4(false);
           } else if (data.type === "revealAnswer") {
-            setCorrectAnswer({ title: data.title || "", artist: data.artist || "" });
+            setCorrectAnswer({ title: data.title || "", artist: data.artist || "", correctIndex: data.correctIndex });
             setCanPlay(false);
           } else if (data.type === "showRanking") {
             setRankingData(data.ranking || []);
@@ -268,9 +234,26 @@ export default function Player() {
       const timer = setInterval(() => setSecondsLeft((prev) => prev - 1), 1000);
       return () => clearInterval(timer);
     } else if (secondsLeft === 0 && canPlay) {
-      handleSubmit();
+      if (currentRound === 1) {
+        // QCM : le choix est déjà parti à chaque clic, on fige simplement l'écran
+        setSubmittedAnswer({ title: "", artist: "", choiceIndex: choice });
+        setCanPlay(false);
+      } else {
+        handleSubmit();
+      }
     }
   }, [secondsLeft, canPlay]);
+
+  // Manche 1 : chaque clic est envoyé, le dernier choix compte
+  const handleChoose = (index) => {
+    if (!conn || !canPlay || currentRound !== 1) return;
+    setChoice(index);
+    const responseTime = roundStartTime ? ((Date.now() - roundStartTime) / 1000).toFixed(2) : null;
+    conn.send({
+      type: "playerResponse",
+      response: { choiceIndex: index, timestamp: Date.now(), songIndex: currentSongIndex, pseudo, responseTime },
+    });
+  };
 
   const handleSubmit = () => {
     if (!conn || !canPlay || (currentRound === 4 && !activeRound4)) return;
@@ -612,6 +595,20 @@ export default function Player() {
             EN ATTENTE DE LA RÉVÉLATION…
           </div>
 
+          {currentRound === 1 && (
+            <Panel style={{ padding: 16, width: '100%' }}>
+              <div style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 9, letterSpacing: '0.2em', color: 'var(--mo-ink-dim)', marginBottom: 8 }}>TON CHOIX</div>
+              {submittedAnswer.choiceIndex !== null && submittedAnswer.choiceIndex !== undefined ? (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+                  <MicIcon color={MIC_CHOICES[submittedAnswer.choiceIndex].color} size={44} />
+                  <span className="mo-display" style={{ fontSize: 28, color: MIC_CHOICES[submittedAnswer.choiceIndex].color }}>{MIC_CHOICES[submittedAnswer.choiceIndex].letter}</span>
+                </div>
+              ) : (
+                <div style={{ fontFamily: 'var(--mo-font-display)', fontSize: 14, color: 'var(--mo-ink-dim)' }}>Aucun choix</div>
+              )}
+            </Panel>
+          )}
+
           {(submittedAnswer.title || submittedAnswer.artist) && (
             <Panel style={{ padding: 16, width: '100%' }}>
               <div style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 9, letterSpacing: '0.2em', color: 'var(--mo-ink-dim)', marginBottom: 8 }}>TA RÉPONSE</div>
@@ -726,9 +723,12 @@ export default function Player() {
 
   // ── JOINED — REVEAL (correct answer received) ─────────────
   if (joinStep === "joined" && correctAnswer) {
+    const myChoice = currentRound === 1 ? (submittedAnswer?.choiceIndex ?? choice) : null;
+    const answered = currentRound === 1 ? (myChoice !== null && myChoice !== undefined) : !!submittedAnswer;
+    const choiceCorrect = currentRound === 1 && answered && myChoice === correctAnswer.correctIndex;
     const titleCorrect = submittedAnswer && isCorrect(submittedAnswer.title, correctAnswer.title);
     const artistCorrect = submittedAnswer && currentRound !== 2 && isArtistCorrect(submittedAnswer.artist, correctAnswer.artist);
-    const gotPoints = submittedAnswer && (titleCorrect || artistCorrect);
+    const gotPoints = currentRound === 1 ? choiceCorrect : submittedAnswer && (titleCorrect || artistCorrect);
 
     if (gotPoints) {
       // GOOD feedback
@@ -764,7 +764,7 @@ export default function Player() {
               {currentRound === 2 || (titleCorrect && artistCorrect) ? 'PARFAIT !' : 'BRAVO !'}
             </div>
             <div style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 10, letterSpacing: '0.3em', color: 'var(--mo-cyan)' }}>
-              {currentRound === 2 ? 'TITRE ✓' : titleCorrect && artistCorrect ? 'TITRE + ARTISTE' : titleCorrect ? 'TITRE ✓' : 'ARTISTE ✓'} · {roundNames[currentRound - 1]}
+              {currentRound === 1 ? 'BONNE RÉPONSE ✓' : currentRound === 2 ? 'TITRE ✓' : titleCorrect && artistCorrect ? 'TITRE + ARTISTE' : titleCorrect ? 'TITRE ✓' : 'ARTISTE ✓'} · {roundNames[currentRound - 1]}
             </div>
 
             {isFastest && (
@@ -852,10 +852,10 @@ export default function Player() {
             </div>
 
             <div className="mo-display mo-neon" style={{ fontSize: 48, color: 'var(--mo-magenta)', lineHeight: 0.95 }}>
-              {currentRound === 4 && !activeRound4 ? 'ÉLIMINÉ·E' : submittedAnswer ? 'RATÉ !' : 'TEMPS !'}
+              {currentRound === 4 && !activeRound4 ? 'ÉLIMINÉ·E' : answered ? 'RATÉ !' : 'TEMPS !'}
             </div>
             <div style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 10, letterSpacing: '0.25em', color: 'var(--mo-ink-dim)' }}>
-              {currentRound === 4 && !activeRound4 ? 'TU REJOINS LES SPECTATEURS' : submittedAnswer ? 'ON SE REFAIT SUR LA PROCHAINE' : 'LE TEMPS EST ÉCOULÉ'}
+              {currentRound === 4 && !activeRound4 ? 'TU REJOINS LES SPECTATEURS' : answered ? 'ON SE REFAIT SUR LA PROCHAINE' : 'LE TEMPS EST ÉCOULÉ'}
             </div>
 
             <Panel style={{ padding: 16, width: '100%', textAlign: 'left' }}>
@@ -867,6 +867,14 @@ export default function Player() {
                 {correctAnswer.artist.toUpperCase()}
               </div>
             </Panel>
+
+            {currentRound === 1 && answered && (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, opacity: 0.85 }}>
+                <span style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 9, letterSpacing: '0.2em', color: 'var(--mo-ink-dim)' }}>TON CHOIX</span>
+                <MicIcon color={MIC_CHOICES[myChoice].color} size={32} />
+                <span className="mo-display" style={{ fontSize: 18, color: MIC_CHOICES[myChoice].color }}>{MIC_CHOICES[myChoice].letter}</span>
+              </div>
+            )}
 
             {submittedAnswer && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%', textAlign: 'left' }}>
@@ -950,8 +958,16 @@ export default function Player() {
               <Eq count={10} />
             </div>
             <div className="mo-display mo-neon" style={{ fontSize: 28, color: 'var(--mo-magenta)', margin: '4px 0' }}>
-              {canPlay ? 'ÇA JOUE…' : 'EN ATTENTE'}
+              {!canPlay ? 'EN ATTENTE'
+                : currentRound === 4 && audioSeconds !== null && totalSeconds - secondsLeft >= audioSeconds ? 'MUSIQUE COUPÉE'
+                : 'ÇA JOUE…'}
             </div>
+            {canPlay && currentRound === 2 && theme && (
+              <div style={{ margin: '6px 0 4px' }}>
+                <div style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 9, letterSpacing: '0.3em', color: 'var(--mo-gold)' }}>THÈME</div>
+                <div className="mo-display" style={{ fontSize: 22, color: 'var(--mo-gold)', textShadow: '0 0 10px var(--mo-gold)', lineHeight: 1.1 }}>{theme.toUpperCase()}</div>
+              </div>
+            )}
             {canPlay && (
               <>
                 <div style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 10, color: 'var(--mo-cyan)' }}>
@@ -973,6 +989,42 @@ export default function Player() {
 
       {/* Inputs */}
       <div style={{ position: 'relative', zIndex: 2, padding: '0 18px', display: 'flex', flexDirection: 'column', gap: 14, flex: 1 }}>
+        {currentRound === 1 ? (
+          <>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, flex: 1, alignContent: 'start' }}>
+              {MIC_CHOICES.slice(0, optionCount).map((m, i) => {
+                const selected = choice === i;
+                return (
+                  <button
+                    key={i}
+                    onClick={() => handleChoose(i)}
+                    disabled={!canPlay}
+                    aria-label={`Proposition ${m.letter}`}
+                    aria-pressed={selected}
+                    style={{
+                      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6,
+                      minHeight: 150, borderRadius: 18, cursor: canPlay ? 'pointer' : 'default',
+                      border: selected ? `3px solid ${m.color}` : '1.5px solid var(--mo-line)',
+                      background: selected ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.03)',
+                      boxShadow: selected ? `0 0 22px ${m.color}` : 'none',
+                      opacity: canPlay || selected ? 1 : 0.45,
+                      transition: 'all 0.12s ease',
+                    }}
+                  >
+                    <MicIcon color={m.color} size={64} />
+                    <span className="mo-display" style={{ fontSize: 22, color: m.color }}>{m.letter}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{ textAlign: 'center', fontFamily: 'var(--mo-font-mono)', fontSize: 9, color: 'var(--mo-ink-dim)', letterSpacing: '0.2em', paddingBottom: 18 }}>
+              {canPlay
+                ? (choice === null ? 'REGARDE LE GRAND ÉCRAN · CHOISIS TON MICRO' : 'TU PEUX CHANGER D\'AVIS JUSQU\'À LA DERNIÈRE SECONDE')
+                : 'EN ATTENTE DE LA PROCHAINE CHANSON'}
+            </div>
+          </>
+        ) : (
+          <>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
             <span style={{ width: 8, height: 8, borderRadius: 99, background: 'var(--mo-cyan)', boxShadow: '0 0 8px var(--mo-cyan)', flexShrink: 0 }} />
@@ -1032,6 +1084,8 @@ export default function Player() {
           <div style={{ textAlign: 'center', fontFamily: 'var(--mo-font-mono)', fontSize: 9, color: 'var(--mo-ink-dim)', letterSpacing: '0.2em' }}>
             PLUS C'EST RAPIDE, PLUS ÇA RAPPORTE
           </div>
+        )}
+          </>
         )}
       </div>
 
