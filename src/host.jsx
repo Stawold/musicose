@@ -47,6 +47,13 @@ const isCorrect = (answer, correct) => {
   return dist <= maxDist;
 };
 
+// Artiste : nom complet OU nom de famille (dernier mot)
+const isArtistCorrect = (answer, correct) => {
+  if (isCorrect(answer, correct)) return true;
+  const words = normalize(correct).split(' ');
+  return words.length > 1 && isCorrect(answer, words[words.length - 1]);
+};
+
 const roundNames = ["Chansons en rafale", "Le Focus", "Fast and Musicous", "Le battle Royal d'Ose"];
 const ROUND_RANGES = { 1: [0, 29], 2: [30, 39], 3: [40, 70], 4: [71, 85] };
 
@@ -336,8 +343,8 @@ export default function Host() {
 
             switch (round) {
               case 1:
-                if (isCorrect(playerTitle, correctTitle) && isCorrect(playerArtist, correctArtist)) points = 3;
-                else if (isCorrect(playerTitle, correctTitle) || isCorrect(playerArtist, correctArtist)) points = 1;
+                if (isCorrect(playerTitle, correctTitle) && isArtistCorrect(playerArtist, correctArtist)) points = 3;
+                else if (isCorrect(playerTitle, correctTitle) || isArtistCorrect(playerArtist, correctArtist)) points = 1;
                 if (points === 3 && responseTime !== null) {
                   const currentFastest = fastestRef.current;
                   if (!currentFastest || responseTime < currentFastest.time) {
@@ -354,7 +361,7 @@ export default function Host() {
                 if (isCorrect(playerTitle, correctTitle)) points = 2;
                 break;
               case 3: {
-                if (isCorrect(playerTitle, correctTitle) && isCorrect(playerArtist, correctArtist)) {
+                if (isCorrect(playerTitle, correctTitle) && isArtistCorrect(playerArtist, correctArtist)) {
                   points = 3;
                   const bonusOrder = bonusOrderRef.current[idx] || [];
                   const position = bonusOrder.length;
@@ -363,15 +370,15 @@ export default function Host() {
                     round3BonusAmount = [3, 2, 1][position];
                     points += round3BonusAmount;
                   }
-                } else if (isCorrect(playerTitle, correctTitle) || isCorrect(playerArtist, correctArtist)) {
+                } else if (isCorrect(playerTitle, correctTitle) || isArtistCorrect(playerArtist, correctArtist)) {
                   points = 1;
                 }
                 break;
               }
               case 4:
                 if (!round4Active) return;
-                if (isCorrect(playerTitle, correctTitle) && isCorrect(playerArtist, correctArtist)) points = 5;
-                else if (isCorrect(playerTitle, correctTitle) || isCorrect(playerArtist, correctArtist)) points = 2;
+                if (isCorrect(playerTitle, correctTitle) && isArtistCorrect(playerArtist, correctArtist)) points = 5;
+                else if (isCorrect(playerTitle, correctTitle) || isArtistCorrect(playerArtist, correctArtist)) points = 2;
                 break;
               default:
                 points = 0;
@@ -491,7 +498,7 @@ export default function Host() {
       let parfait = 0, bien = 0, rate = 0;
       responses.forEach(r => {
         const titleOk = isCorrect(r.title || '', songToReveal.title);
-        const artistOk = currentRound === 2 ? true : isCorrect(r.artist || '', songToReveal.artist);
+        const artistOk = currentRound === 2 ? true : isArtistCorrect(r.artist || '', songToReveal.artist);
         if (titleOk && artistOk) parfait++;
         else if (titleOk || (currentRound !== 2 && artistOk)) bien++;
         else rate++;
@@ -610,7 +617,7 @@ export default function Host() {
     if (r.points === undefined) return { c: 'rgba(255,45,149,0.3)', label: 'EN ATTENTE' };
     if (r.points === 0) return { c: 'rgba(255,255,255,0.15)', label: 'RATÉ' };
     const titleOk = isCorrect(r.title || '', currentSong?.title || '');
-    const artistOk = isCorrect(r.artist || '', currentSong?.artist || '');
+    const artistOk = isArtistCorrect(r.artist || '', currentSong?.artist || '');
     if (titleOk && artistOk) return { c: 'var(--mo-cyan)', label: 'PARFAIT' };
     return { c: 'var(--mo-gold)', label: 'PARTIEL' };
   };

@@ -47,6 +47,13 @@ const isCorrect = (answer, correct) => {
   return dist <= maxDist;
 };
 
+// Artiste : nom complet OU nom de famille (dernier mot)
+const isArtistCorrect = (answer, correct) => {
+  if (isCorrect(answer, correct)) return true;
+  const words = normalize(correct).split(' ');
+  return words.length > 1 && isCorrect(answer, words[words.length - 1]);
+};
+
 const roundNames = ["Chansons en rafale", "Le Focus", "Fast and Musicous", "Le battle Royal d'Ose"];
 
 const generateSessionId = () => {
@@ -720,7 +727,7 @@ export default function Player() {
   // ── JOINED — REVEAL (correct answer received) ─────────────
   if (joinStep === "joined" && correctAnswer) {
     const titleCorrect = submittedAnswer && isCorrect(submittedAnswer.title, correctAnswer.title);
-    const artistCorrect = submittedAnswer && currentRound !== 2 && isCorrect(submittedAnswer.artist, correctAnswer.artist);
+    const artistCorrect = submittedAnswer && currentRound !== 2 && isArtistCorrect(submittedAnswer.artist, correctAnswer.artist);
     const gotPoints = submittedAnswer && (titleCorrect || artistCorrect);
 
     if (gotPoints) {
