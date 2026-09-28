@@ -80,6 +80,14 @@ try {
     const p = await context.newPage();
     await p.setViewportSize({ width: 390, height: 850 });
     watch(p, pseudo);
+    await p.addInitScript(() => {   // faux Wake Lock : compte les demandes et permet de simuler une libération par le système
+      window.__wl = { requests: 0, active: 0, last: null };
+      Object.defineProperty(navigator, 'wakeLock', { configurable: true, value: { request: async () => {
+        const s = { released: false, _l: [], addEventListener(e, f) { this._l.push(f); },
+          release: async () => { if (!s.released) { s.released = true; window.__wl.active--; s._l.forEach(f => f()); } } };
+        window.__wl.requests++; window.__wl.active++; window.__wl.last = s; return s;
+      } } });
+    });
     await p.addInitScript(([pseudo, sid, code]) => {
       localStorage.setItem('musicose_mode', 'player');
       localStorage.setItem('musicose_session', JSON.stringify({ sessionId: sid, pseudo, gameCode: code, avatarColor: 'var(--mo-magenta)' }));
@@ -115,6 +123,20 @@ try {
   };
   const delta = async (before) => { const now = await scores(); return { a: now.a - before.a, b: now.b - before.b, c: now.c - before.c }; };
   const same = (x, y) => JSON.stringify(x) === JSON.stringify(y);
+
+  // ── Écran toujours allumé ──────────────────────────────────
+  console.log('\nVerrouillage de l’écran');
+  const wl = (p) => p.evaluate(() => ({ requests: window.__wl.requests, active: window.__wl.active }));
+  check('téléphone : verrou d’écran demandé dès la connexion', (await wl(alice)).active === 1, JSON.stringify(await wl(alice)));
+  await alice.evaluate(() => window.__wl.last.release());               // le système libère le verrou (ex. onglet en arrière-plan)
+  check('verrou libéré par le système', (await wl(alice)).active === 0);
+  await alice.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  await sleep(200);
+  check('verrou redemandé au retour sur l’onglet', (await wl(alice)).active === 1, JSON.stringify(await wl(alice)));
+  await alice.evaluate(() => window.__wl.last.release());
+  await alice.locator('body').click({ position: { x: 5, y: 5 } });
+  await sleep(200);
+  check('verrou redemandé à la première interaction', (await wl(alice)).active === 1, JSON.stringify(await wl(alice)));
 
   // ═══ MANCHE 1 — 4 micros ═══════════════════════════════════
   console.log('\nManche 1 — Chansons en rafale (4 propositions)');

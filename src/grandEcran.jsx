@@ -4,6 +4,7 @@ import { Chip, Eq, Stars, GridFloor, Panel, Vinyl, Avatar } from "./components/M
 import { peerConfig } from "./peerConfig";
 import { MIC_CHOICES } from "./gameLogic";
 import MicIcon from "./components/MicIcon";
+import useWakeLock from "./useWakeLock";
 import "./styles/tokens.css";
 
 const AVATAR_COLORS = [
@@ -47,6 +48,8 @@ export default function GrandEcran() {
   const [audioSeconds, setAudioSeconds] = useState(null); // manche 4
 
   const stageRef = useRef(null);
+
+  useWakeLock(true); // le grand écran ne doit jamais s'éteindre
 
   // --- Scale 1920×1080 stage to fit viewport ---
   useEffect(() => {

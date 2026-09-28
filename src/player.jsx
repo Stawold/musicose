@@ -8,6 +8,7 @@ import {
   ROUND_NAMES as roundNames, MIC_CHOICES, isCorrect, isArtistCorrect,
 } from "./gameLogic";
 import MicIcon from "./components/MicIcon";
+import useWakeLock from "./useWakeLock";
 
 const generateSessionId = () => {
   if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
@@ -66,6 +67,9 @@ export default function Player() {
   const [optionCount, setOptionCount] = useState(4);
   const [theme, setTheme] = useState("");               // manche 2
   const [audioSeconds, setAudioSeconds] = useState(null); // manche 4 : durée d'écoute
+
+  // Écran du téléphone maintenu allumé pendant toute la partie (pause, attente, classement…)
+  useWakeLock(joinStep === "joined");
 
   const KVDB_BASE = "https://kvdb.io/GVkYCf2Kfn44jq3EYGweRj/";
 
