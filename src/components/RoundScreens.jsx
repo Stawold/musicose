@@ -1,11 +1,13 @@
 import React from "react";
 import { MIC_CHOICES } from "../gameLogic";
 import { ROUND_THEMES, roundSeconds, buildBars, rnd, formatSeconds } from "../roundThemes";
+import { MAX_PLAYERS } from "../gameLogic";
 import MicIcon from "./MicIcon";
 import "../styles/grandEcran.css";
 
 // Maquettes Claude Design v2 : scène de 1280×720 px, affichée à l'échelle 1,5 dans le décor 1920×1080 du grand écran.
 const SUN_MASK = 'linear-gradient(#000 0 50%,transparent 50% 56%,#000 56% 66%,transparent 66% 72%,#000 72% 80%,transparent 80% 86%,#000 86%)';
+const brand = (code) => (code ? `MUSIC'OSE · ${code}` : "MUSIC'OSE");
 const TEKTUR = "'Tektur', 'Impact', sans-serif";
 const MONO = "'DM Mono', ui-monospace, monospace";
 
@@ -154,7 +156,7 @@ function OptionsPanel({ m, options }) {
 }
 
 /* ── Manche en cours ──────────────────────────────────────── */
-export function ScreenRound({ round, remaining, answers, players, songNumber, totalInRound, options, theme, musicCut, fastestList }) {
+export function ScreenRound({ code, round, remaining, answers, players, songNumber, totalInRound, options, theme, musicCut, fastestList }) {
   const m = ROUND_THEMES[round];
   const cd = String(Math.max(0, Math.ceil(remaining))).padStart(2, '0');
   const aliveList = players.map(p => p.alive !== false);
@@ -172,7 +174,7 @@ export function ScreenRound({ round, remaining, answers, players, songNumber, to
 
       <Bar m={m} top>
         <span>MANCHE {String(round).padStart(2, '0')} · CHANSON {songNumber}/{totalInRound}</span>
-        <span>MUSIC'OSE</span>
+        <span>{brand(code)}</span>
       </Bar>
 
       <div style={{ position: 'absolute', left: 48, top: 90, font: `800 64px/.95 ${TEKTUR}`, fontStyle: 'italic', textShadow: `4px 4px 0 ${m.a}`, whiteSpace: 'nowrap' }}>
@@ -226,7 +228,7 @@ export function ScreenRound({ round, remaining, answers, players, songNumber, to
 }
 
 /* ── Transition : annonce de la manche ────────────────────── */
-export function ScreenTransition({ round }) {
+export function ScreenTransition({ round, code }) {
   const m = ROUND_THEMES[round];
   return (
     <Stage m={m}>
@@ -239,7 +241,7 @@ export function ScreenTransition({ round }) {
       }} />
       <Bar m={m} top>
         <span>MANCHE</span>
-        <span>MUSIC'OSE</span>
+        <span>{brand(code)}</span>
       </Bar>
       <div style={{ position: 'absolute', left: 70, top: 100, display: 'flex', flexDirection: 'column', gap: 18 }}>
         <div style={{ font: `800 180px/.8 ${TEKTUR}`, color: m.b, fontStyle: 'italic' }}>{String(round).padStart(2, '0')}</div>
@@ -250,6 +252,207 @@ export function ScreenTransition({ round }) {
         <span>{roundSeconds(round)} S</span>
         <span>{m.pts}</span>
       </Bar>
+    </Stage>
+  );
+}
+
+
+/* ═══ Écrans hors chanson, dans le même style ═══════════════════════════ */
+const BRAND = ROUND_THEMES[3];   // salle d'attente et podium : couleurs de la marque (néon rose / cyan)
+const pad2 = (n) => String(n).padStart(2, '0');
+
+const Backdrop = ({ m, sun = 300, sunLeft, sunRight, sunTop = 120 }) => (
+  <>
+    <Sun m={m} size={sun} left={sunLeft} right={sunRight} top={sunTop} />
+    <GridFloor m={m} top={470} height={400} />
+  </>
+);
+
+const AVATARS = ['#FF2E93', '#00E5FF', '#FFC933', '#B14BFF', '#FF7A59'];
+
+/* Salle d'attente */
+export function ScreenLobby({ code, players }) {
+  const m = BRAND;
+  return (
+    <Stage m={m}>
+      <Backdrop m={m} sun={380} sunRight={90} sunTop={110} />
+      <Bar m={m} top><span>SALLE OUVERTE</span><span>MUSIC'OSE</span></Bar>
+
+      <div style={{ position: 'absolute', left: 48, top: 92 }}>
+        <div style={{ font: `800 60px/.95 ${TEKTUR}`, fontStyle: 'italic', textShadow: `4px 4px 0 ${m.a}` }}>MUSIC'OSE</div>
+        <div style={{ font: `500 16px ${MONO}`, letterSpacing: '.3em', color: m.a, marginTop: 34 }}>CODE DE LA PARTIE</div>
+        <div style={{ font: `800 112px/1 ${TEKTUR}`, color: m.b, letterSpacing: '.02em', marginTop: 8 }}>{code || '—'}</div>
+        <div style={{ font: `500 24px/1.5 ${MONO}`, background: m.bg, marginTop: 10, maxWidth: 520 }}>
+          Entre le code <b style={{ color: m.b }}>{code || '—'}</b> sur ton téléphone pour rejoindre.
+        </div>
+      </div>
+
+      <Panel m={m} title="JOUEUR·SES" width={460}>
+        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+          <span style={{ font: `800 64px/.9 ${TEKTUR}` }}>{players.length}</span>
+          <span style={{ font: `500 18px ${MONO}`, color: m.b }}>/ {MAX_PLAYERS}</span>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px 8px', maxHeight: 330, overflow: 'hidden' }}>
+          {players.slice(0, 20).map((p, i) => (
+            <div key={p.pseudo + i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, minWidth: 0 }}>
+              <div style={{
+                width: 48, height: 48, borderRadius: '50%', background: `radial-gradient(circle at 30% 25%, ${AVATARS[i % AVATARS.length]}, rgba(0,0,0,.35))`,
+                border: `2px solid ${AVATARS[i % AVATARS.length]}`, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                font: `800 16px ${TEKTUR}`, color: m.bg,
+              }}>{(p.pseudo || '?').slice(0, 2).toUpperCase()}</div>
+              <div style={{ font: `400 13px ${MONO}`, maxWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.pseudo}</div>
+            </div>
+          ))}
+        </div>
+        {players.length > 20 && <div style={{ font: `500 14px ${MONO}`, color: m.b }}>+ {players.length - 20} AUTRES</div>}
+      </Panel>
+
+      <Bar m={m}><span>EN ATTENTE DU LANCEMENT PAR L'HÔTE</span><span>4 MANCHES</span></Bar>
+    </Stage>
+  );
+}
+
+/* Révélation de la réponse */
+export function ScreenReveal({ round, info, code }) {
+  if (!info) return null;
+  const m = ROUND_THEMES[round] || BRAND;
+  const long = (info.title || '').length > 22;
+  const stats = info.stats ? (round === 1
+    ? [['JUSTE', info.stats.parfait, m.b], ['FAUX', info.stats.rate, m.a], ['SANS RÉPONSE', info.stats.sans, m.fg]]
+    : [['PARFAIT', info.stats.parfait, m.b], ['BIEN', info.stats.bien, m.fg], ['RATÉ', info.stats.rate, m.a], ['SANS RÉPONSE', info.stats.sans, m.fg]]
+  ).filter(([, v]) => v !== undefined) : [];
+
+  return (
+    <Stage m={m}>
+      <Backdrop m={m} sun={300} sunLeft={560} sunTop={100} />
+      <Bar m={m} top><span>MANCHE {pad2(round)} · LA RÉPONSE</span><span>{brand(code)}</span></Bar>
+
+      <div style={{ position: 'absolute', left: 48, top: 100, width: 860 }}>
+        <div style={{ font: `500 18px ${MONO}`, letterSpacing: '.3em', color: m.a }}>LA RÉPONSE ÉTAIT</div>
+        <div style={{ font: `800 ${long ? 56 : 84}px/.98 ${TEKTUR}`, fontStyle: 'italic', textShadow: `5px 5px 0 ${m.a}`, marginTop: 18, wordBreak: 'break-word' }}>
+          {(info.title || '').toUpperCase()}
+        </div>
+        <div style={{ font: `500 40px/1.1 ${TEKTUR}`, color: m.b, marginTop: 26 }}>{(info.artist || '').toUpperCase()}</div>
+      </div>
+
+      {info.options && (
+        <div style={{ position: 'absolute', left: 48, top: 470, width: 860, display: 'flex', gap: 12 }}>
+          {info.options.map((o, i) => {
+            const mic = MIC_CHOICES[i];
+            const right = i === info.correctIndex;
+            return (
+              <div key={i} style={{
+                flex: 1, display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', boxSizing: 'border-box',
+                border: `2px solid ${right ? mic.color : 'rgba(255,255,255,.15)'}`, background: right ? 'rgba(255,255,255,.08)' : m.panel,
+                boxShadow: right ? `0 0 18px ${mic.color}` : 'none', opacity: right ? 1 : 0.45,
+              }}>
+                <MicIcon color={mic.color} size={34} />
+                <span style={{ font: `800 24px ${TEKTUR}`, color: mic.color }}>{mic.letter}</span>
+                <span style={{ font: `500 22px ${MONO}` }}>{info.votes ? info.votes[i] : ''}</span>
+                {right && <span style={{ marginLeft: 'auto', font: `800 22px ${TEKTUR}`, color: m.b }}>✓</span>}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {stats.length > 0 && (
+        <Panel m={m} title="SUR CETTE CHANSON">
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '10px 12px', alignItems: 'baseline' }}>
+            {stats.map(([label, v, color]) => (
+              <React.Fragment key={label}>
+                <span style={{ font: `500 16px ${MONO}`, letterSpacing: '.1em' }}>{label}</span>
+                <span style={{ font: `800 40px/1 ${TEKTUR}`, color }}>{v}</span>
+              </React.Fragment>
+            ))}
+          </div>
+        </Panel>
+      )}
+
+      <Bar m={m}><span>{m.label}</span><span>{m.pts}</span></Bar>
+    </Stage>
+  );
+}
+
+/* Classement intermédiaire */
+export function ScreenStandings({ round, ranking, code }) {
+  const m = ROUND_THEMES[round] || BRAND;
+  const rows = ranking.slice(0, 8);
+  const max = Math.max(1, ...rows.map(r => r.score || 0));
+  const rankColor = (i) => (i === 0 ? m.b : i === 1 ? m.a : i === 2 ? m.fg : 'rgba(255,255,255,.55)');
+  return (
+    <Stage m={m}>
+      <Backdrop m={m} sun={300} sunRight={50} sunTop={130} />
+      <Bar m={m} top><span>APRÈS LA MANCHE {pad2(round)}</span><span>{brand(code)}</span></Bar>
+
+      <div style={{ position: 'absolute', left: 48, top: 84, font: `800 56px/.95 ${TEKTUR}`, fontStyle: 'italic', textShadow: `4px 4px 0 ${m.a}` }}>CLASSEMENT</div>
+
+      <div style={{ position: 'absolute', left: 48, right: 400, top: 168, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {rows.length === 0 && <div style={{ font: `500 22px ${MONO}` }}>—</div>}
+        {rows.map((r, i) => (
+          <div key={r.pseudo + i} style={{
+            position: 'relative', display: 'grid', gridTemplateColumns: '64px 1fr 150px', alignItems: 'center', height: 52, padding: '0 18px',
+            background: m.panel, borderLeft: `5px solid ${rankColor(i)}`, overflow: 'hidden',
+          }}>
+            <div style={{ position: 'absolute', left: 0, bottom: 0, height: 3, width: `${((r.score || 0) / max) * 100}%`, background: rankColor(i), opacity: .8 }} />
+            <span style={{ font: `800 32px ${TEKTUR}`, color: rankColor(i) }}>{i + 1}</span>
+            <span style={{ font: `500 28px ${TEKTUR}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.pseudo}</span>
+            <span style={{ font: `500 26px ${MONO}`, textAlign: 'right', color: i < 3 ? m.b : m.fg }}>{(r.score || 0).toLocaleString('fr-FR')} PTS</span>
+          </div>
+        ))}
+      </div>
+
+      <Bar m={m}><span>{m.label}</span><span>{ranking.length} JOUEUR·SES</span></Bar>
+    </Stage>
+  );
+}
+
+/* Podium final */
+export function ScreenPodium({ ranking, code }) {
+  const m = BRAND;
+  const top3 = ranking.slice(0, 3);
+  const rest = ranking.slice(3, 8);
+  const steps = [
+    { p: top3[1], rank: 2, h: 200, bg: m.b, fg: m.bg },
+    { p: top3[0], rank: 1, h: 280, bg: m.a, fg: '#fff' },
+    { p: top3[2], rank: 3, h: 140, bg: m.fg, fg: m.bg },
+  ];
+  return (
+    <Stage m={m}>
+      <Backdrop m={m} sun={380} sunLeft={450} sunTop={70} />
+      <Bar m={m} top><span>FIN DE PARTIE</span><span>{brand(code)}</span></Bar>
+
+      <div style={{ position: 'absolute', left: 0, right: 0, top: 80, textAlign: 'center', font: `800 84px/.95 ${TEKTUR}`, fontStyle: 'italic', textShadow: `5px 5px 0 ${m.a}` }}>PODIUM</div>
+
+      <div style={{ position: 'absolute', left: 48, width: 760, bottom: 84, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: 16 }}>
+        {steps.map(({ p, rank, h, bg, fg }) => (
+          <div key={rank} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'stretch', minWidth: 0 }}>
+            <div style={{ textAlign: 'center', marginBottom: 8 }}>
+              <div style={{ font: `800 ${rank === 1 ? 32 : 26}px/1.05 ${TEKTUR}`, wordBreak: 'break-word' }}>{p ? p.pseudo : '—'}</div>
+              <div style={{ font: `500 18px ${MONO}`, color: m.b, marginTop: 4 }}>{p ? `${(p.score || 0).toLocaleString('fr-FR')} PTS` : ''}</div>
+            </div>
+            <div style={{ height: h, background: bg, color: fg, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: 10, boxShadow: `0 0 24px ${bg}66` }}>
+              <span style={{ font: `800 ${rank === 1 ? 110 : 84}px/.9 ${TEKTUR}` }}>{rank}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {rest.length > 0 && (
+        <Panel m={m} title="SUIVANTS">
+          <div style={{ display: 'grid', gridTemplateColumns: '32px 1fr auto', gap: '8px 10px', font: `500 20px ${MONO}` }}>
+            {rest.map((r, i) => (
+              <React.Fragment key={r.pseudo + i}>
+                <span style={{ color: m.b }}>{i + 4}</span>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.pseudo}</span>
+                <span>{r.score || 0}</span>
+              </React.Fragment>
+            ))}
+          </div>
+        </Panel>
+      )}
+
+      <Bar m={m}><span>MERCI D'AVOIR JOUÉ</span><span>{ranking.length} JOUEUR·SES</span></Bar>
     </Stage>
   );
 }

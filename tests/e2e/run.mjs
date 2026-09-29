@@ -99,6 +99,10 @@ try {
   const cleo = await makePlayer('Cleo', 'sid-c');
   await host.waitForSelector('text=3 JOUEUR');
   check('3 joueurs connectés à la régie', true);
+  await sleep(400);
+  const lobbyText = (await ge.locator('body').innerText()).replace(/\s+/g, ' ');
+  check('grand écran : salle d’attente (code, joueurs, pseudos)', lobbyText.includes(CODE) && /SALLE OUVERTE/.test(lobbyText) && /3 \/ 30/.test(lobbyText) && ['Alice', 'Bob', 'Cleo'].every(n => lobbyText.includes(n)), lobbyText.slice(0, 250));
+  await shot(ge, 'ge-lobby');
 
   // ── Helpers ────────────────────────────────────────────────
   const hostScore = (name) => host.evaluate((name) => {
@@ -207,7 +211,9 @@ try {
   await next();                 // index 14 (15/15)
   check('classement proposé à la fin de la manche 1 (15e chanson)', await host.getByRole('button', { name: /MONTRER LE CLASSEMENT/ }).count() === 1);
   await clickHost(/MONTRER LE CLASSEMENT/); await sleep(400);
-  check('grand écran : classement affiché', /CLASSEMENT/.test(await ge.locator('body').innerText()));
+  const stText = (await ge.locator('body').innerText()).replace(/\s+/g, ' ');
+  check('grand écran : classement affiché (après la manche 01, joueurs classés avec points)', /CLASSEMENT/.test(stText) && /APRÈS LA MANCHE 01/.test(stText) && /Cleo/.test(stText) && /PTS/.test(stText), stText.slice(0, 250));
+  await shot(ge, 'ge-classement');
   await alice.getByRole('button', { name: /Continuer/ }).click();
   await next();                 // index 15 → manche 2
   check('la manche 2 démarre à la 16e chanson', await host.locator('text=/MANCHE 2 · CHANSON 1\\/15/').count() > 0);
@@ -282,7 +288,9 @@ try {
   await next(8);                // index 64
   check('podium proposé à la 65e chanson', await host.getByRole('button', { name: /AFFICHER LE PODIUM FINAL/ }).count() === 1);
   await clickHost(/AFFICHER LE PODIUM FINAL/); await sleep(400);
-  check('grand écran : podium', /PODIUM/.test(await ge.locator('body').innerText()));
+  const poText = (await ge.locator('body').innerText()).replace(/\s+/g, ' ');
+  check('grand écran : podium (3 premiers)', /PODIUM/.test(poText) && ['Alice', 'Bob', 'Cleo'].every(n => poText.includes(n)), poText.slice(0, 250));
+  await shot(ge, 'ge-podium');
   check('téléphone : podium', /PODIUM/.test(await alice.locator('body').innerText()));
 
   check('aucune erreur JavaScript dans les pages', errors.length === 0, errors.slice(0, 3).join(' | '));

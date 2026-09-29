@@ -16,6 +16,7 @@ export const ROUND_CONFIG = {
 export const TOTAL_SONGS = ROUND_CONFIG[4].end + 1; // 65
 
 export const CHOICE_COUNT = 4;
+export const MAX_PLAYERS = 30;   // affichage de la salle d'attente
 
 // Manche 1 : 4 micros de couleurs différentes (+ lettre pour les daltoniens)
 export const MIC_CHOICES = [
