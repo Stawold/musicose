@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { Peer } from "peerjs";
 import { Chip, Eq, Stars, GridFloor, Panel, Vinyl, Avatar } from "./components/MoUI";
 import { peerConfig } from "./peerConfig";
-import { MIC_CHOICES } from "./gameLogic";
+import { MIC_CHOICES, isGameCode, peerIdFromCode } from "./gameLogic";
 import MicIcon from "./components/MicIcon";
 import useWakeLock from "./useWakeLock";
 import "./styles/tokens.css";
@@ -14,18 +14,6 @@ const AVATAR_COLORS = [
   'var(--mo-violet)',
   '#ff7a59',
 ];
-
-const KVDB_BASE = "https://kvdb.io/GVkYCf2Kfn44jq3EYGweRj/";
-
-const resolveShortCode = async (shortCode) => {
-  try {
-    const res = await fetch(`${KVDB_BASE}${encodeURIComponent(shortCode)}`);
-    if (!res.ok) throw new Error("Code introuvable");
-    return res.text().then(text => text.trim());
-  } catch (e) {
-    return null;
-  }
-};
 
 export default function GrandEcran() {
   const [status, setStatus] = useState("connecting"); // connecting | connected | error
@@ -78,16 +66,8 @@ export default function GrandEcran() {
 
     const peer = new Peer(undefined, peerConfig);
 
-    peer.on("open", async () => {
-      let realHostId = code;
-      if (code.toUpperCase().startsWith("OSE-")) {
-        const resolved = await resolveShortCode(code.toUpperCase());
-        if (!resolved) {
-          setStatus("error");
-          return;
-        }
-        realHostId = resolved;
-      }
+    peer.on("open", () => {
+      const realHostId = isGameCode(code) ? peerIdFromCode(code) : code;
 
       const connection = peer.connect(realHostId);
 

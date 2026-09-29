@@ -5,7 +5,7 @@ import { peerConfig } from "./peerConfig";
 import "./styles/tokens.css";
 
 import {
-  ROUND_NAMES as roundNames, MIC_CHOICES, isCorrect, isArtistCorrect,
+  ROUND_NAMES as roundNames, MIC_CHOICES, isCorrect, isArtistCorrect, isGameCode, peerIdFromCode,
 } from "./gameLogic";
 import MicIcon from "./components/MicIcon";
 import useWakeLock from "./useWakeLock";
@@ -71,8 +71,6 @@ export default function Player() {
   // Écran du téléphone maintenu allumé pendant toute la partie (pause, attente, classement…)
   useWakeLock(joinStep === "joined");
 
-  const KVDB_BASE = "https://kvdb.io/GVkYCf2Kfn44jq3EYGweRj/";
-
   useEffect(() => {
     const saved = localStorage.getItem("musicose_session");
     if (saved) {
@@ -91,17 +89,6 @@ export default function Player() {
       }
     }
   }, []);
-
-  const resolveShortCode = async (shortCode) => {
-    try {
-      const res = await fetch(`${KVDB_BASE}${encodeURIComponent(shortCode)}`);
-      if (!res.ok) throw new Error("Code introuvable");
-      return res.text().then(text => text.trim());
-    } catch (e) {
-      console.warn("Erreur résolution shortCode:", e);
-      return null;
-    }
-  };
 
   const handleJoinGame = async () => {
     if (joinStep === "pseudo") {
@@ -150,19 +137,14 @@ export default function Player() {
 
       newPeer.on("error", (err) => {
         console.error("Erreur PeerJS (joueur) :", err);
-        fail("❌ Connexion impossible. Vérifie ta connexion internet et réessaie.");
+        fail(err && err.type === "peer-unavailable"
+          ? "❌ Code introuvable. Vérifie le code ou demande à l'hôte."
+          : "❌ Connexion impossible. Vérifie ta connexion internet et réessaie.");
       });
 
-      newPeer.on("open", async () => {
-        let realHostId = finalCode;
-        if (finalCode.toUpperCase().startsWith("OSE-")) {
-          const resolved = await resolveShortCode(finalCode.toUpperCase());
-          if (!resolved) {
-            fail("❌ Code introuvable. Vérifie le code ou demande à l'hôte.");
-            return;
-          }
-          realHostId = resolved;
-        }
+      newPeer.on("open", () => {
+        // Le code de partie est l'identifiant de la régie (sinon : identifiant brut, comme avant)
+        const realHostId = isGameCode(finalCode) ? peerIdFromCode(finalCode) : finalCode;
 
         const connection = newPeer.connect(realHostId);
         setConn(connection);

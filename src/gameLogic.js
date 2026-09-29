@@ -192,3 +192,16 @@ export const adjustedScores = (player, round, delta) => {
   perRound[round - 1] = Math.max(0, (perRound[round - 1] || 0) + applied);
   return { totalScore: newTotal, scorePerRound: perRound, applied };
 };
+
+// ── Code de partie ─────────────────────────────────────────────
+// Le code affiché (OSE-XXXX) sert directement d'identifiant PeerJS de la régie :
+// les joueurs se connectent avec, sans passer par un service tiers pour retrouver la régie.
+// Alphabet sans caractères ambigus (pas de 0/O, 1/I/L).
+export const GAME_CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+
+export const generateGameCode = (rng = Math.random) =>
+  'OSE-' + Array.from({ length: 4 }, () => GAME_CODE_ALPHABET[Math.floor(rng() * GAME_CODE_ALPHABET.length)]).join('');
+
+export const peerIdFromCode = (code) => 'musicose-' + String(code).trim().toUpperCase();
+
+export const isGameCode = (code) => /^OSE-[A-Z0-9]{4}$/i.test(String(code).trim());

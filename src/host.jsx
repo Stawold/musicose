@@ -9,6 +9,7 @@ import {
   roundForIndex, isEndOfRound, isCorrect, isArtistCorrect,
   scoreTextAnswer, round3BonusForPosition, scoreChoiceRound,
   buildOptions, themeFor, adjustedScores, POINTS,
+  generateGameCode, peerIdFromCode,
 } from "./gameLogic";
 import MicIcon from "./components/MicIcon";
 
@@ -93,23 +94,18 @@ export default function Host() {
     }
   };
 
-  const sendShortCodeToKvdb = async (sc, hId) => {
-    try {
-      const res = await fetch(`${KVDB_BASE}${encodeURIComponent(sc)}`, {
-        method: "PUT",
-        body: hId,
-      });
-      if (!res.ok) console.warn("Erreur écriture kvdb", res.status);
-    } catch (e) {
-      console.error("Erreur kvdb PUT", e);
-    }
+  // Sauvegarde de secours des scores (best effort) : ne doit jamais bloquer ni casser le jeu.
+  const kvFetch = (url, options = {}, ms = 3000) => {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), ms);
+    return fetch(url, { ...options, signal: ctrl.signal }).finally(() => clearTimeout(timer));
   };
 
   const saveScoreToKvdb = async (sessionId, scoreData) => {
     const sc = shortCodeRef.current;
     if (!sc) return;
     try {
-      await fetch(`${KVDB_BASE}score-${sc}-${sessionId}`, {
+      await kvFetch(`${KVDB_BASE}score-${sc}-${sessionId}`, {
         method: "PUT",
         body: JSON.stringify(scoreData),
       });
@@ -122,7 +118,7 @@ export default function Host() {
     const sc = shortCodeRef.current;
     if (!sc) return null;
     try {
-      const res = await fetch(`${KVDB_BASE}score-${sc}-${sessionId}`);
+      const res = await kvFetch(`${KVDB_BASE}score-${sc}-${sessionId}`);
       if (!res.ok) return null;
       return JSON.parse(await res.text());
     } catch (e) {
@@ -229,199 +225,205 @@ export default function Host() {
   useEffect(() => {
     if (!authenticated) return;
 
-    const newPeer = new Peer(undefined, peerConfig);
-    setPeer(newPeer);
-    setPeerStatus("connecting");
+    let currentPeer = null;
+    const boot = (attempt) => {
+      const code = generateGameCode();
+      const newPeer = new Peer(peerIdFromCode(code), peerConfig);
+      currentPeer = newPeer;
+      setPeer(newPeer);
+      setPeerStatus("connecting");
 
-    newPeer.on("open", async (id) => {
-      setHostId(id);
-      try {
-        const sc = "OSE-" + id.slice(-4).toUpperCase();
-        setShortCode(sc);
-        shortCodeRef.current = sc;
+      newPeer.on("open", async (id) => {
+        setHostId(id);
+        setShortCode(code);
+        shortCodeRef.current = code;
         setPeerStatus("ready");
-        console.log("ShortCode généré :", sc);
-        sendShortCodeToKvdb(sc, id);
-      } catch (e) {
-        console.warn("Erreur génération shortCode :", e);
-      }
-    });
-
-    newPeer.on("error", (err) => {
-      console.error("Erreur PeerJS :", err);
-      setPeerStatus("error");
-    });
-
-    newPeer.on("connection", (conn) => {
-      setConnections(prev => [...prev, conn]);
-
-      conn.on("close", () => {
-        setConnections(prev => prev.filter(c => c !== conn));
-        setGeConnections(prev => prev.filter(c => c !== conn));
+        console.log("Code de partie :", code);
       });
 
-      conn.on("open", () => conn.send({ type: "welcome", message: "Bienvenue sur Music'Ose !" }));
+      newPeer.on("error", (err) => {
+        console.error("Erreur PeerJS :", err);
+        if (err && err.type === "unavailable-id" && attempt < 8) {
+          // code déjà utilisé par une autre partie : on en tire un autre
+          newPeer.destroy();
+          boot(attempt + 1);
+          return;
+        }
+        setPeerStatus("error");
+      });
 
-      conn.on("data", (data) => {
-        try {
-          if (data.type === "newGrandEcran") {
-            setGeConnections(prev => [...prev, conn]);
-            return;
-          }
+      newPeer.on("connection", (conn) => {
+        setConnections(prev => [...prev, conn]);
 
-          if (data.type === "newPlayer") {
-            const sessionId = data.sessionId || conn.peer;
-            peerToSession.current[conn.peer] = sessionId;
-            connBySessionRef.current[sessionId] = conn;
+        conn.on("close", () => {
+          setConnections(prev => prev.filter(c => c !== conn));
+          setGeConnections(prev => prev.filter(c => c !== conn));
+        });
 
-            // If a song is currently playing, let the (re)joining player jump
-            // straight into it with the time remaining, instead of making
-            // them wait for the next song.
-            const sendCatchUpTimer = (eligible) => {
-              if (!eligible) return;
-              if (isCountingRef.current && secondsLeftRef.current > 0 && playlistRef.current) {
-                conn.send({
-                  type: "startTimer",
-                  seconds: secondsLeftRef.current,
-                  songIndex: currentSongIndexRef.current,
-                  round: currentRoundRef.current,
-                  ...songPayloadRef.current,
-                });
-              }
-            };
+        conn.on("open", () => conn.send({ type: "welcome", message: "Bienvenue sur Music'Ose !" }));
 
-            const existingPlayer = playersRef.current[sessionId];
-
-            if (existingPlayer) {
-              setPlayers(prev => ({
-                ...prev,
-                [sessionId]: { ...prev[sessionId], peerId: conn.peer },
-              }));
-              conn.send({
-                type: "sessionRestored",
-                totalScore: existingPlayer.totalScore,
-                round: currentRoundRef.current,
-              });
-              sendCatchUpTimer(currentRoundRef.current !== 4 || existingPlayer.activeRound4 !== false);
-            } else {
-              fetchScoreFromKvdb(sessionId).then(savedScore => {
-                if (savedScore) {
-                  setPlayers(prev => ({
-                    ...prev,
-                    [sessionId]: {
-                      pseudo: savedScore.pseudo || data.pseudo,
-                      scorePerRound: savedScore.scorePerRound || [0, 0, 0, 0],
-                      totalScore: savedScore.totalScore || 0,
-                      activeRound4: true,
-                      peerId: conn.peer,
-                    },
-                  }));
-                  conn.send({
-                    type: "sessionRestored",
-                    totalScore: savedScore.totalScore,
-                    round: currentRoundRef.current,
-                  });
-                } else {
-                  setPlayers(prev => ({
-                    ...prev,
-                    [sessionId]: {
-                      pseudo: data.pseudo,
-                      scorePerRound: [0, 0, 0, 0],
-                      totalScore: 0,
-                      activeRound4: true,
-                      peerId: conn.peer,
-                    },
-                  }));
-                }
-                sendCatchUpTimer(true);
-              });
-            }
-            return;
-          }
-
-          if (data.type === "playerResponse") {
-            const sessionId = peerToSession.current[conn.peer];
-            if (!sessionId) return;
-
-            const pl = playlistRef.current;
-            const idx = currentSongIndexRef.current;
-            const round = currentRoundRef.current;
-            if (!pl || !pl.songs || typeof idx !== "number") return;
-
-            const song = pl.songs[idx];
-            const resp = data.response || {};
-            if (typeof resp.songIndex === "number" && resp.songIndex !== idx) return;
-            const responseTime = resp.responseTime ? parseFloat(resp.responseTime) : null;
-            resp.responseTime = responseTime;
-
-            // ── Manche 1 : QCM — le dernier choix compte, notation à la fin du temps ──
-            if (round === 1) {
-              const open = finalizedRef.current !== idx && (isCountingRef.current || Date.now() < acceptUntilRef.current);
-              const opts = roundOptionsRef.current;
-              const i = resp.choiceIndex;
-              if (!open || !opts || !Number.isInteger(i) || i < 0 || i >= opts.options.length) return;
-              choicesRef.current[sessionId] = { index: i, time: responseTime };
-              const chosen = opts.options[i];
-              setResponses(prev => [
-                ...prev.filter(r => r.playerId !== sessionId),
-                { ...resp, title: chosen.title, artist: chosen.artist, choiceIndex: i, playerId: sessionId },
-              ]);
-              sendAnswersCount(Object.keys(choicesRef.current).length);
+        conn.on("data", (data) => {
+          try {
+            if (data.type === "newGrandEcran") {
+              setGeConnections(prev => [...prev, conn]);
               return;
             }
 
-            // ── Manches 2 à 4 : réponse saisie, une seule par chanson ──
-            const round4Active = playersRef.current[sessionId]?.activeRound4 ?? true;
-            if (round === 4 && !round4Active) return;
-            if (answeredRef.current[sessionId]) return;
-            answeredRef.current[sessionId] = true;
+            if (data.type === "newPlayer") {
+              const sessionId = data.sessionId || conn.peer;
+              peerToSession.current[conn.peer] = sessionId;
+              connBySessionRef.current[sessionId] = conn;
 
-            const result = scoreTextAnswer(round, { title: (resp.title || "").trim(), artist: (resp.artist || "").trim() }, song);
-            let points = result.points;
-            let isFastestBonus = false;
-            let round3BonusAmount = 0;
+              // If a song is currently playing, let the (re)joining player jump
+              // straight into it with the time remaining, instead of making
+              // them wait for the next song.
+              const sendCatchUpTimer = (eligible) => {
+                if (!eligible) return;
+                if (isCountingRef.current && secondsLeftRef.current > 0 && playlistRef.current) {
+                  conn.send({
+                    type: "startTimer",
+                    seconds: secondsLeftRef.current,
+                    songIndex: currentSongIndexRef.current,
+                    round: currentRoundRef.current,
+                    ...songPayloadRef.current,
+                  });
+                }
+              };
 
-            if (round === 2 && points > 0 && !fastestRef.current) {
-              points += POINTS.round2FastestBonus;
-              isFastestBonus = true;
-              fastestRef.current = { playerId: sessionId, time: responseTime };
-              setFastest(fastestRef.current);
-              setBonusWinnerId(sessionId);
+              const existingPlayer = playersRef.current[sessionId];
+
+              if (existingPlayer) {
+                setPlayers(prev => ({
+                  ...prev,
+                  [sessionId]: { ...prev[sessionId], peerId: conn.peer },
+                }));
+                conn.send({
+                  type: "sessionRestored",
+                  totalScore: existingPlayer.totalScore,
+                  round: currentRoundRef.current,
+                });
+                sendCatchUpTimer(currentRoundRef.current !== 4 || existingPlayer.activeRound4 !== false);
+              } else {
+                fetchScoreFromKvdb(sessionId).then(savedScore => {
+                  if (savedScore) {
+                    setPlayers(prev => ({
+                      ...prev,
+                      [sessionId]: {
+                        pseudo: savedScore.pseudo || data.pseudo,
+                        scorePerRound: savedScore.scorePerRound || [0, 0, 0, 0],
+                        totalScore: savedScore.totalScore || 0,
+                        activeRound4: true,
+                        peerId: conn.peer,
+                      },
+                    }));
+                    conn.send({
+                      type: "sessionRestored",
+                      totalScore: savedScore.totalScore,
+                      round: currentRoundRef.current,
+                    });
+                  } else {
+                    setPlayers(prev => ({
+                      ...prev,
+                      [sessionId]: {
+                        pseudo: data.pseudo,
+                        scorePerRound: [0, 0, 0, 0],
+                        totalScore: 0,
+                        activeRound4: true,
+                        peerId: conn.peer,
+                      },
+                    }));
+                  }
+                  sendCatchUpTimer(true);
+                });
+              }
+              return;
             }
 
-            if (round === 3 && result.both) {
-              const bonusOrder = bonusOrderRef.current[idx] || [];
-              bonusOrderRef.current[idx] = [...bonusOrder, sessionId];
-              round3BonusAmount = round3BonusForPosition(bonusOrder.length);
-              points += round3BonusAmount;
+            if (data.type === "playerResponse") {
+              const sessionId = peerToSession.current[conn.peer];
+              if (!sessionId) return;
+
+              const pl = playlistRef.current;
+              const idx = currentSongIndexRef.current;
+              const round = currentRoundRef.current;
+              if (!pl || !pl.songs || typeof idx !== "number") return;
+
+              const song = pl.songs[idx];
+              const resp = data.response || {};
+              if (typeof resp.songIndex === "number" && resp.songIndex !== idx) return;
+              const responseTime = resp.responseTime ? parseFloat(resp.responseTime) : null;
+              resp.responseTime = responseTime;
+
+              // ── Manche 1 : QCM — le dernier choix compte, notation à la fin du temps ──
+              if (round === 1) {
+                const open = finalizedRef.current !== idx && (isCountingRef.current || Date.now() < acceptUntilRef.current);
+                const opts = roundOptionsRef.current;
+                const i = resp.choiceIndex;
+                if (!open || !opts || !Number.isInteger(i) || i < 0 || i >= opts.options.length) return;
+                choicesRef.current[sessionId] = { index: i, time: responseTime };
+                const chosen = opts.options[i];
+                setResponses(prev => [
+                  ...prev.filter(r => r.playerId !== sessionId),
+                  { ...resp, title: chosen.title, artist: chosen.artist, choiceIndex: i, playerId: sessionId },
+                ]);
+                sendAnswersCount(Object.keys(choicesRef.current).length);
+                return;
+              }
+
+              // ── Manches 2 à 4 : réponse saisie, une seule par chanson ──
+              const round4Active = playersRef.current[sessionId]?.activeRound4 ?? true;
+              if (round === 4 && !round4Active) return;
+              if (answeredRef.current[sessionId]) return;
+              answeredRef.current[sessionId] = true;
+
+              const result = scoreTextAnswer(round, { title: (resp.title || "").trim(), artist: (resp.artist || "").trim() }, song);
+              let points = result.points;
+              let isFastestBonus = false;
+              let round3BonusAmount = 0;
+
+              if (round === 2 && points > 0 && !fastestRef.current) {
+                points += POINTS.round2FastestBonus;
+                isFastestBonus = true;
+                fastestRef.current = { playerId: sessionId, time: responseTime };
+                setFastest(fastestRef.current);
+                setBonusWinnerId(sessionId);
+              }
+
+              if (round === 3 && result.both) {
+                const bonusOrder = bonusOrderRef.current[idx] || [];
+                bonusOrderRef.current[idx] = [...bonusOrder, sessionId];
+                round3BonusAmount = round3BonusForPosition(bonusOrder.length);
+                points += round3BonusAmount;
+              }
+
+              // Manche 4 : aucune bonne réponse → éliminé
+              if (round === 4 && result.points === 0) {
+                setPlayers(prev => prev[sessionId]
+                  ? { ...prev, [sessionId]: { ...prev[sessionId], activeRound4: false } }
+                  : prev);
+                conn.send({ type: "eliminatedRound4" });
+              }
+
+              const updated = points > 0 ? applyPoints(sessionId, round, points) : playersRef.current[sessionId];
+
+              resp.points = points;
+              setResponses(prev => [...prev, { ...resp, playerId: sessionId }]);
+              conn.send({
+                type: "responseAck", points, fastest: isFastestBonus, round3Bonus: round3BonusAmount,
+                totalScore: updated ? updated.totalScore : undefined,
+              });
+              sendAnswersCount(responsesRef.current.length + 1);
             }
-
-            // Manche 4 : aucune bonne réponse → éliminé
-            if (round === 4 && result.points === 0) {
-              setPlayers(prev => prev[sessionId]
-                ? { ...prev, [sessionId]: { ...prev[sessionId], activeRound4: false } }
-                : prev);
-              conn.send({ type: "eliminatedRound4" });
-            }
-
-            const updated = points > 0 ? applyPoints(sessionId, round, points) : playersRef.current[sessionId];
-
-            resp.points = points;
-            setResponses(prev => [...prev, { ...resp, playerId: sessionId }]);
-            conn.send({
-              type: "responseAck", points, fastest: isFastestBonus, round3Bonus: round3BonusAmount,
-              totalScore: updated ? updated.totalScore : undefined,
-            });
-            sendAnswersCount(responsesRef.current.length + 1);
+          } catch (e) {
+            console.error("Erreur traitement data :", e);
           }
-        } catch (e) {
-          console.error("Erreur traitement data :", e);
-        }
+        });
       });
-    });
+    };
+    boot(0);
 
     return () => {
-      if (newPeer) newPeer.destroy();
+      if (currentPeer) currentPeer.destroy();
     };
   }, [authenticated]);
 

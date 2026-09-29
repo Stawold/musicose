@@ -34,12 +34,9 @@ const server = await createServer({ configFile: 'vite.e2e.config.js', server: { 
 await server.listen();
 const browser = await chromium.launch();
 const context = await browser.newContext();
-const kv = new Map();
 await context.route('https://kvdb.io/**', async (route) => {
   const req = route.request();
-  const key = new URL(req.url()).pathname;
-  if (req.method() === 'PUT') { kv.set(key, req.postData() || ''); return route.fulfill({ status: 200, body: '' }); }
-  return kv.has(key) ? route.fulfill({ status: 200, body: kv.get(key) }) : route.fulfill({ status: 404, body: '' });
+  return route.abort('connectionreset');   // kvdb.io HORS SERVICE : la partie doit fonctionner quand même
 });
 await context.route('**/playlists/**', (route) => {
   const url = route.request().url();
@@ -65,7 +62,7 @@ try {
   await host.getByRole('button', { name: 'Valider' }).click();
   const codeText = await host.locator('text=/CODE · OSE-/').first().textContent();
   const CODE = codeText.match(/OSE-\w+/)[0];
-  console.log(`\nPartie ${CODE}`);
+  console.log(`\nPartie ${CODE}  (kvdb.io simulé hors service)`);
   await host.waitForSelector('text=/CHANSON 1\\/15/');
 
   // ── Grand écran ────────────────────────────────────────────

@@ -4,6 +4,7 @@ import {
   ROUND_CONFIG, TOTAL_SONGS, roundForIndex, isEndOfRound,
   isCorrect, isArtistCorrect, scoreTextAnswer, round3BonusForPosition,
   scoreChoiceRound, buildOptions, themeFor, adjustedScores,
+  generateGameCode, peerIdFromCode, isGameCode, GAME_CODE_ALPHABET,
 } from '../src/gameLogic.js';
 
 // Playlist factice de 65 chansons
@@ -147,4 +148,18 @@ test('ajustement manuel des scores : +1 / -1, jamais sous 0', () => {
   assert.deepEqual(adjustedScores(p, 2, 1), { totalScore: 11, scorePerRound: [4, 7, 0, 0], applied: 1 });
   assert.deepEqual(adjustedScores(p, 1, -1), { totalScore: 9, scorePerRound: [3, 6, 0, 0], applied: -1 });
   assert.equal(adjustedScores({ totalScore: 0, scorePerRound: [0, 0, 0, 0] }, 1, -1), null);
+});
+
+test('code de partie : format OSE-XXXX, sans caractères ambigus, identifiant PeerJS dérivé', () => {
+  for (let i = 0; i < 200; i++) {
+    const code = generateGameCode();
+    assert.match(code, /^OSE-[A-Z2-9]{4}$/);
+    assert.ok(isGameCode(code));
+    assert.ok(!/[01OIL]/.test(code.slice(4)));
+  }
+  assert.ok(!/[01OIL]/.test(GAME_CODE_ALPHABET));
+  assert.equal(peerIdFromCode('OSE-AB3D'), 'musicose-OSE-AB3D');
+  assert.equal(peerIdFromCode(' ose-ab3d '), 'musicose-OSE-AB3D');   // saisie au clavier tolérante
+  assert.ok(/^[A-Za-z0-9_-]+$/.test(peerIdFromCode('OSE-AB3D')));     // caractères acceptés par PeerJS
+  assert.ok(!isGameCode('abc123xyz'));                                // identifiant brut : ancien comportement
 });
