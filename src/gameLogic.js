@@ -20,10 +20,10 @@ export const MAX_PLAYERS = 30;   // affichage de la salle d'attente
 
 // Manche 1 : 4 micros de couleurs différentes (+ lettre pour les daltoniens)
 export const MIC_CHOICES = [
-  { letter: 'A', label: 'ROSE',  color: 'var(--mo-magenta)' },
-  { letter: 'B', label: 'CYAN',  color: 'var(--mo-cyan)' },
-  { letter: 'C', label: 'OR',    color: 'var(--mo-gold)' },
-  { letter: 'D', label: 'VERT',  color: '#7CFF6B' },
+  { letter: 'A', label: 'JAUNE', color: '#FFC933' },
+  { letter: 'B', label: 'CORAIL', color: '#FF5A4E' },
+  { letter: 'C', label: 'CRÈME', color: '#FFF3D6' },
+  { letter: 'D', label: 'BLEU', color: '#8FB0FF' },
 ];
 
 export const roundForIndex = (songIndex) => {
@@ -34,6 +34,9 @@ export const roundForIndex = (songIndex) => {
 };
 
 // Fin de manche 1, 2 ou 3 → classement intermédiaire (la manche 4 se termine par le podium)
+// Première chanson d'une manche 2, 3 ou 4 (la manche 1 démarre depuis la salle d'attente)
+export const isRoundStart = (songIndex) => [2, 3, 4].some(r => ROUND_CONFIG[r].start === songIndex);
+
 export const isEndOfRound = (songIndex) => [1, 2, 3].some(r => ROUND_CONFIG[r].end === songIndex);
 
 // ── Comparaison de réponses ────────────────────────────────────

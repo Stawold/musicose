@@ -90,14 +90,21 @@ try {
       localStorage.setItem('musicose_session', JSON.stringify({ sessionId: sid, pseudo, gameCode: code, avatarColor: 'var(--mo-magenta)' }));
     }, [pseudo, sid, CODE]);
     await p.goto(BASE);
-    await p.getByRole('button', { name: /REJOINDRE/ }).click();
-    await p.waitForSelector('text=EN ATTENTE');
+    if (pseudo === 'Alice') await shot(p, 'tel-connexion');
+    await p.getByRole('button', { name: /ENTRER EN SCÈNE/ }).click();
+    await p.waitForSelector('text=JOUEURS CONNECTÉS');
     return p;
   };
   const alice = await makePlayer('Alice', 'sid-a');
   const bob = await makePlayer('Bob', 'sid-b');
   const cleo = await makePlayer('Cleo', 'sid-c');
   await host.waitForSelector('text=3 JOUEUR');
+  await sleep(500);
+  await shot(alice, 'tel-attente');
+  {
+    const waitText = (await alice.locator('body').innerText()).replace(/\s+/g, ' ');
+    check('téléphone : l’écran d’attente liste les joueurs connectés', ['Alice', 'Bob', 'Cleo'].every(n => waitText.includes(n)) && /JOUEURS CONNECTÉS 3/.test(waitText) && waitText.includes(CODE), waitText.slice(0, 300));
+  }
   check('3 joueurs connectés à la régie', true);
   await sleep(400);
   const lobbyText = (await ge.locator('body').innerText()).replace(/\s+/g, ' ');
@@ -120,12 +127,14 @@ try {
   const scores = async () => ({ a: await hostScore('Alice'), b: await hostScore('Bob'), c: await hostScore('Cleo') });
   const clickHost = (name) => host.getByRole('button', { name }).click();
   const next = async (n = 1) => { for (let i = 0; i < n; i++) { await clickHost('▶▶'); await sleep(40); } };
-  const start = async () => { await clickHost(/LANCER/); await sleep(500); };
+  const start = async () => { await clickHost(/LANCER/); await sleep(1500); };   // 1,2 s d'effet de manche quand la manche vient d'être annoncée
+  const phoneSeconds = async (p) => Number(await p.locator('[data-seconds]').first().getAttribute('data-seconds'));
+  const announce = async (n) => { await clickHost(new RegExp(`ANNONCER LA MANCHE ${n}`)); };
   const reveal = async () => { await clickHost(/RÉVÉLER LA RÉPONSE/); await sleep(500); };
   const answer = async (page, title, artist) => {
-    await page.getByPlaceholder('Titre de la chanson…').fill(title);
+    await page.getByPlaceholder('Titre…').fill(title);
     if (artist !== undefined) await page.getByPlaceholder('Artiste…').fill(artist);
-    await page.getByRole('button', { name: /VALIDER MA RÉPONSE/ }).click();
+    await page.getByRole('button', { name: /VALIDER/ }).click();
     await sleep(250);
   };
   const delta = async (before) => { const now = await scores(); return { a: now.a - before.a, b: now.b - before.b, c: now.c - before.c }; };
@@ -147,7 +156,11 @@ try {
 
   // ═══ MANCHE 1 — 4 micros ═══════════════════════════════════
   console.log('\nManche 1 — Chansons en rafale (4 propositions)');
-  await clickHost(/ANNONCER LA MANCHE 1/); await sleep(400);
+  await announce(1); await sleep(350);
+  check('effet de passage vers la manche 1 (rayons de soleil)', await ge.locator('[data-transition="0"]').count() === 1);
+  await shot(ge, 'ge-effet1');
+  await sleep(1300);
+  check('l’effet se termine tout seul', await ge.locator('[data-transition]').count() === 0);
   const trText = (await ge.locator('body').innerText()).replace(/\s+/g, ' ');
   check('transition : manche 1 annoncée (numéro, nom, règle, durée, points)',
     /01/.test(trText) && /CHANSONS/.test(trText) && /EN RAFALE/.test(trText) && /Choisis le bon micro/.test(trText) && /30 S/.test(trText) && /1 PT \+ BONUS \+1/.test(trText), trText.slice(0, 250));
@@ -156,6 +169,9 @@ try {
   await shot(ge, 'ge-manche1'); await shot(alice, 'tel-manche1');
   const boxes = await ge.evaluate(() => [...document.querySelectorAll('[data-option]')].map(el => { const r = el.getBoundingClientRect(); return { w: Math.round(r.width), h: Math.round(r.height) }; }));
   check('manche 1 : les 4 propositions occupent une grande place (≥ 400×200 px sur un écran 1280×720)', boxes.length === 4 && boxes.every(b => b.w >= 400 && b.h >= 200), JSON.stringify(boxes));
+  const geColors = await ge.evaluate(() => [0, 1, 2, 3].map(i => getComputedStyle(document.querySelector(`[data-option="${i}"]`)).borderTopColor));
+  const phoneColors = await alice.evaluate(() => ['A', 'B', 'C', 'D'].map(l => getComputedStyle(document.querySelector(`button[aria-label="Proposition ${l}"]`)).backgroundColor));
+  check('manche 1 : mêmes couleurs de micros sur le téléphone et sur le grand écran', JSON.stringify(geColors) === JSON.stringify(phoneColors) && new Set(geColors).size === 4, `${JSON.stringify(geColors)} / ${JSON.stringify(phoneColors)}`);
   const barH = await ge.evaluate(() => Math.max(...[...document.querySelectorAll('.ge-bar')].map(b => b.getBoundingClientRect().height)));
   check('manche 1 : barre de son réduite (≤ 70 px)', barH <= 70, String(barH));
   const geR1 = (await ge.locator('body').innerText()).replace(/\s+/g, ' ');
@@ -163,7 +179,7 @@ try {
   check('en cours de partie : QR code et code de partie restent affichés', await ge.locator('svg[data-url]').count() === 1 && geR1.includes(CODE) && /REJOINS/.test(geR1));
   const micCount = await alice.getByRole('button', { name: /^Proposition / }).count();
   check('téléphone : 4 micros affichés', micCount === 4, String(micCount));
-  check('téléphone : aucun champ texte en manche 1', await alice.getByPlaceholder('Titre de la chanson…').count() === 0);
+  check('téléphone : aucun champ texte en manche 1', await alice.getByPlaceholder('Titre…').count() === 0);
   check('téléphone : aucun titre de proposition révélé', !/Faux \d|Titre 1\b/.test(await alice.locator('body').innerText()));
   const geText = await ge.locator('body').innerText();
   check('grand écran : 4 propositions avec titres et artistes', ['Faux 1', 'Faux 2', 'Faux 3', 'Titre 1'].every(t => geText.includes(t)) && geText.includes('Faux Artiste 2') && geText.includes('Prenom1 Nom1'));
@@ -182,7 +198,9 @@ try {
   await sleep(300);
   check('grand écran : compteur de réponses', /3\/3 RÉPONSES/.test((await ge.locator('body').innerText()).replace(/\s+/g, ' ')));
   await reveal();
-  await shot(ge, 'ge-reveal1');
+  await shot(ge, 'ge-reveal1'); await shot(alice, 'tel-revelation'); await shot(bob, 'tel-revelation-rate');
+  const revText = (await alice.locator('body').innerText()).replace(/\s+/g, ' ');
+  check('téléphone : la révélation montre le résultat, la réponse, le classement et un bouton continuer', /BONNE RÉPONSE/.test(revText) && /\+2/.test(revText) && /C'ÉTAIT/.test(revText) && /CLASSEMENT/.test(revText) && /CONTINUER/.test(revText), revText.slice(0, 350));
   check('révélation : numéro de question toujours visible', /QUESTION 01\/15 · TOTAL 01\/65/.test((await ge.locator('body').innerText()).replace(/\s+/g, ' ')));
   let s = await scores();
   check('Alice : 1 pt + 1 bonus (dernier choix juste, plus rapide)', s.a === 2, JSON.stringify(s));
@@ -232,13 +250,18 @@ try {
   const posOf = () => ge.evaluate(() => Object.fromEntries([...document.querySelectorAll('[data-standing]')].map(el => [el.dataset.standing, Number(el.dataset.pos)])));
   const pos1 = await posOf();
   check('classement : QR code toujours visible', await ge.locator('svg[data-url]').count() === 1);
-  await alice.getByRole('button', { name: /Continuer/ }).click();
+  await alice.getByRole('button', { name: /CONTINUER/i }).click();
   await next();                 // index 15 → manche 2
   check('la manche 2 démarre à la 16e chanson', await host.locator('text=/MANCHE 2 · CHANSON 1\\/15/').count() > 0);
 
   // ═══ MANCHE 2 — Le Focus ═══════════════════════════════════
   console.log('\nManche 2 — Le Focus (thème, titre seul)');
-  await clickHost(/ANNONCER LA MANCHE 2/); await sleep(300);
+  const homeText = (await ge.locator('body').innerText()).replace(/\s+/g, ' ');
+  check('entre les manches : retour à l’accueil, la manche 2 est mise en avant', /ACCUEIL/.test(homeText) && /PRÊTS \?/.test(homeText) && await ge.locator('[data-pill="2"][data-next="true"]').count() === 1 && await ge.locator('[data-pill][data-next="true"]').count() === 1, homeText.slice(0, 200));
+  await shot(ge, 'ge-accueil');
+  await announce(2); await sleep(500);
+  await shot(ge, 'ge-effet2');
+  await sleep(1000);
   await shot(ge, 'ge-transition2');
   check('transition : manche 2 annoncée', /LE\s+FOCUS/.test(await ge.locator('body').innerText()) && /Trouve le titre/.test(await ge.locator('body').innerText()));
   await start();
@@ -246,10 +269,12 @@ try {
   const aliceText = await alice.locator('body').innerText();
   check('téléphone : thème affiché', aliceText.includes('THÈME') && aliceText.includes('THEME 16'), aliceText.slice(0, 200));
   check('téléphone : pas de champ artiste', await alice.getByPlaceholder('Artiste…').count() === 0);
-  check('téléphone : 30 s', /(29|30)s restantes/.test(aliceText));
+  const s2 = await phoneSeconds(alice);
+  check('téléphone : compte à rebours de 30 s', s2 >= 28 && s2 <= 30, String(s2));
   check('grand écran : thème affiché', /THÈME/.test(await ge.locator('body').innerText()) && (await ge.locator('body').innerText()).includes('THEME 16'));
   let b2 = await scores();
   await answer(alice, 'titre 16');
+  await shot(alice, 'tel-envoyee');
   await answer(cleo, 'Titre 16');
   await answer(bob, 'mauvais');
   const d2 = await delta(b2);
@@ -278,8 +303,16 @@ try {
   console.log('\nManche 3 — Fast & Musicous');
   await next();                 // index 30
   check('la manche 3 démarre à la 31e chanson', await host.locator('text=/MANCHE 3 · CHANSON 1\\/25/').count() > 0);
+  check('accueil entre les manches : la manche 3 est mise en avant', await ge.locator('[data-pill="3"][data-next="true"]').count() === 1);
+  await announce(3); await sleep(500);
+  await shot(ge, 'ge-effet3');
+  check('effet de passage vers la manche 3 (bandes de vitesse)', await ge.locator('[data-transition="2"]').count() === 1);
+  await sleep(1000);
+  await shot(ge, 'ge-transition3');
   await start();
-  check('téléphone : 45 s', /(44|45)s restantes/.test(await alice.locator('body').innerText()));
+  await shot(alice, 'tel-manche3');
+  const s3 = await phoneSeconds(alice);
+  check('téléphone : compte à rebours de 45 s', s3 >= 43 && s3 <= 45, String(s3));
   const geR3start = (await ge.locator('body').innerText()).replace(/\s+/g, ' ');
   check('manche 3 : numéro de question et total (1/25 · 31/65)', /QUESTION 01\/25 · TOTAL 31\/65/.test(geR3start), geR3start.slice(0, 200));
   const barH3 = await ge.evaluate(() => Math.max(...[...document.querySelectorAll('.ge-bar')].map(b => b.getBoundingClientRect().height)));
@@ -287,6 +320,8 @@ try {
   b2 = await scores();
   await answer(alice, 'Titre 31', 'Nom31');          // titre + nom de famille → 3 + 3
   await answer(cleo, 'titre 31', 'Prenom31 Nom31');  // titre + artiste complet → 3 + 2
+  await sleep(300);
+  check('téléphone manche 3 : « 2 ont déjà répondu » en direct', /PODIUM · 2 ONT DÉJÀ RÉPONDU/.test((await bob.locator('body').innerText()).replace(/\s+/g, ' ')), (await bob.locator('body').innerText()).slice(0, 300));
   await answer(bob, 'Titre 31', 'inconnu');          // titre seul → 1
   const d3 = await delta(b2);
   check('manche 3 : 6 / 5 / 1 pts (bonus 3-2-1 par ordre d’arrivée)', same(d3, { a: 6, b: 1, c: 5 }), JSON.stringify(d3));
@@ -300,8 +335,16 @@ try {
   console.log('\nManche 4 — Le Battle Royal d’Ose');
   await next(25);               // index 55
   check('la manche 4 démarre à la 56e chanson', await host.locator('text=/MANCHE 4 · CHANSON 1\\/10/').count() > 0);
+  check('accueil entre les manches : la manche 4 est mise en avant', await ge.locator('[data-pill="4"][data-next="true"]').count() === 1);
+  await announce(4); await sleep(500);
+  await shot(ge, 'ge-effet4');
+  check('effet de passage vers la manche 4 (zone rouge)', await ge.locator('[data-transition="3"]').count() === 1);
+  await sleep(1000);
+  await shot(ge, 'ge-transition4');
   await start();
-  check('téléphone : 45 s pour répondre', /(44|45)s restantes/.test(await alice.locator('body').innerText()));
+  await shot(alice, 'tel-manche4');
+  const s4 = await phoneSeconds(alice);
+  check('téléphone : 45 s pour répondre', s4 >= 43 && s4 <= 45, String(s4));
   b2 = await scores();
   await answer(alice, 'Titre 56', 'Nom56');   // les deux → 5
   await answer(cleo, 'Titre 56');             // titre seul → 2
@@ -315,6 +358,7 @@ try {
   await next();
   await start();
   check('joueur éliminé bloqué à la chanson suivante', /ÉLIMINÉ/.test(await bob.locator('body').innerText()));
+  check('téléphone manche 4 : « en lice 2 / 3 » en direct', /EN LICE · 2 \/ 3/.test((await alice.locator('body').innerText()).replace(/\s+/g, ' ')), (await alice.locator('body').innerText()).slice(0, 300));
   const audioPlaying = () => host.evaluate(() => { const a = document.querySelector('audio'); return !a.paused; });
   console.log('  … attente de la coupure de la musique à 30 s');
   await sleep(31500);
@@ -322,7 +366,7 @@ try {
   check('manche 4 : musique coupée après 30 s (régie)', /MUSIQUE COUPÉE/.test(await host.locator('body').innerText()) && !(await audioPlaying()));
   check('manche 4 : musique coupée annoncée aux joueurs', /MUSIQUE COUPÉE/.test(await alice.locator('body').innerText()));
   check('manche 4 : musique coupée annoncée au grand écran', /MUSIQUE COUPÉE/.test(await ge.locator('body').innerText()));
-  check('manche 4 : réponses toujours ouvertes après la coupure', await alice.getByRole('button', { name: /VALIDER MA RÉPONSE/ }).isEnabled());
+  check('manche 4 : réponses toujours ouvertes après la coupure', await alice.getByRole('button', { name: /VALIDER/ }).isEnabled());
 
   // Podium final
   await next(8);                // index 64
@@ -355,10 +399,13 @@ try {
   watch(dana, 'Dana');
   await dana.addInitScript(() => localStorage.clear());   // téléphone tout neuf
   await dana.goto(qrUrl);
+  check('QR code : le code de la partie est déjà rempli', (await dana.getByPlaceholder('OSE-XXXX').inputValue()) === CODE);
   await dana.getByPlaceholder('Ton pseudo').fill('Dana');
-  await dana.getByRole('button', { name: /ENTRER SUR SCÈNE/ }).click();
+  await dana.getByRole('button', { name: /ENTRER EN SCÈNE/ }).click();
   await host.waitForSelector('text=4 JOUEUR', { timeout: 15000 }).then(() => check('QR code : le joueur rejoint la partie sans taper le code', true), () => check('QR code : le joueur rejoint la partie sans taper le code', false, 'pas de 4e joueur'));
-  check('QR code : le téléphone est connecté et en attente', /CONNECTÉ/.test(await dana.locator('body').innerText()));
+  await dana.waitForSelector('text=JOUEURS CONNECTÉS');
+  const danaText = await dana.locator('body').innerText();
+  check('QR code : le téléphone est connecté, il voit les autres joueurs', ['Alice', 'Bob', 'Cleo', 'Dana'].every(n => danaText.includes(n)), danaText.slice(0, 300));
 
   check('aucune erreur JavaScript dans les pages', errors.length === 0, errors.slice(0, 3).join(' | '));
 } catch (e) {

@@ -45,3 +45,12 @@
 @media (prefers-reduced-motion: reduce) {
   .ge-dance, .ge-note, .ge-rise, .ge-pop, .ge-fade { animation: none; }
 }
+
+/* Accueil / annonce : grille qui défile, pastille clignotante, entrées en fondu */
+@keyframes ge-grid { from { background-position: 0 0; } to { background-position: 0 60px; } }
+.ge-grid-scroll { animation: ge-grid 2.5s linear infinite; }
+@keyframes ge-blink { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+.ge-blink { animation: ge-blink 1s ease-in-out infinite; }
+@keyframes ge-lift { from { transform: translateY(40px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+.ge-lift { animation: ge-lift .7s cubic-bezier(.2, .9, .3, 1) both; }
+@media (prefers-reduced-motion: reduce) { .ge-grid-scroll, .ge-blink, .ge-lift { animation: none; } }

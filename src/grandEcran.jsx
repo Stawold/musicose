@@ -4,7 +4,7 @@ import { Stars } from "./components/MoUI";
 import { peerConfig } from "./peerConfig";
 import { isGameCode, peerIdFromCode, progressForIndex, ROUND_CONFIG } from "./gameLogic";
 import useWakeLock from "./useWakeLock";
-import { ScreenRound, ScreenTransition, ScreenLobby, ScreenReveal, ScreenStandings, ScreenPodium } from "./components/RoundScreens";
+import { ScreenRound, ScreenTransition, ScreenLobby, ScreenHome, ScreenReveal, ScreenStandings, ScreenPodium, TransitionOverlay } from "./components/RoundScreens";
 import "./styles/tokens.css";
 
 export default function GrandEcran() {
@@ -32,6 +32,9 @@ export default function GrandEcran() {
   const playersRef = useRef([]);
   const lastRankingRef = useRef(null);
   const phaseRef = useRef("lobby");
+  const rafRef = useRef(null);
+  const [overlay, setOverlay] = useState(null);       // effet de passage entre deux écrans { k, p }
+  const [nextRound, setNextRound] = useState(1);      // manche mise en avant sur l'accueil
   playersRef.current = players;
   phaseRef.current = phase;
 
@@ -51,6 +54,22 @@ export default function GrandEcran() {
     window.addEventListener('resize', fit);
     return () => { ro.disconnect(); window.removeEventListener('resize', fit); };
   }, []);
+
+  // Effet de manche (rayons, iris, bandes, zone rouge) : l'écran change au milieu de l'animation.
+  const runTransition = (round, midFn) => {
+    const reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const duration = reduced ? 500 : 1200;
+    cancelAnimationFrame(rafRef.current);
+    const t0 = performance.now();
+    let applied = false;
+    const tick = (now) => {
+      const p = Math.min(1, (now - t0) / duration);
+      if (!applied && p >= 0.5) { applied = true; midFn(); }
+      setOverlay(p < 1 ? { k: round - 1, p, reduced } : null);
+      if (p < 1) rafRef.current = requestAnimationFrame(tick);
+    };
+    rafRef.current = requestAnimationFrame(tick);
+  };
 
   // --- Connect to host as a spectator ---
   useEffect(() => {
@@ -81,17 +100,22 @@ export default function GrandEcran() {
             setPlayers(data.players || []);
             break;
           case "announceRound":
-            setPhase("transition");
             if (typeof data.round === "number") {
-              setCurrentRound(data.round);
-              setSongIndex(ROUND_CONFIG[data.round].start);
+              const r = data.round;
+              runTransition(r, () => { setPhase("transition"); setCurrentRound(r); setSongIndex(ROUND_CONFIG[r].start); });
             }
+            break;
+          case "showHome":
+            setNextRound(typeof data.next === "number" ? data.next : 1);
+            setPhase("home");
             break;
           case "fastestUpdate":
             setFastestList(data.list || []);
             break;
           case "startTimer":
-            setPhase("playing");
+            // après l'annonce de la manche : même effet, qui révèle la première question
+            if (phaseRef.current === "transition" && typeof data.round === "number") runTransition(data.round, () => setPhase("playing"));
+            else setPhase("playing");
             setFastestList([]);
             setRevealInfo(null);
             if (typeof data.round === "number") setCurrentRound(data.round);
@@ -175,6 +199,7 @@ export default function GrandEcran() {
         }}>
           <div style={{ position: 'absolute', inset: 0 }}>
             {phase === 'lobby' && <ScreenLobby code={shortCode} players={players} />}
+            {phase === 'home' && <ScreenHome code={shortCode} next={nextRound} />}
             {phase === 'transition' && <ScreenTransition round={currentRound} code={shortCode} />}
             {phase === 'playing' && (
               <ScreenRound
@@ -193,6 +218,7 @@ export default function GrandEcran() {
             {phase === 'reveal' && <ScreenReveal round={currentRound} info={revealInfo} code={shortCode} progress={progress} />}
             {phase === 'standings' && <ScreenStandings ranking={ranking} prevRanking={prevRanking} round={rankingRound} code={shortCode} />}
             {phase === 'podium' && <ScreenPodium ranking={ranking} code={shortCode} />}
+            {overlay && <TransitionOverlay k={overlay.k} p={overlay.p} reduced={overlay.reduced} />}
           </div>
         </div>
       </div>

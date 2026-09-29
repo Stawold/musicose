@@ -5,7 +5,7 @@ import {
   isCorrect, isArtistCorrect, scoreTextAnswer, round3BonusForPosition,
   scoreChoiceRound, buildOptions, themeFor, adjustedScores,
   generateGameCode, peerIdFromCode, isGameCode, GAME_CODE_ALPHABET,
-  progressForIndex, joinUrl, parseJoinCode,
+  progressForIndex, joinUrl, parseJoinCode, isRoundStart, MIC_CHOICES,
 } from '../src/gameLogic.js';
 
 // Playlist factice de 65 chansons
@@ -185,4 +185,16 @@ test('QR code : lien d’invitation et lecture du code', () => {
   assert.equal(parseJoinCode('?join=nimportequoi'), null);   // valeur invalide ignorée
   assert.equal(parseJoinCode(''), null);
   assert.equal(parseJoinCode('?screen=grand-ecran&code=OSE-AB3D'), null);   // le lien du grand écran n'est pas un lien joueur
+});
+
+test('début de manche : seules les manches 2, 3 et 4 repassent par l’accueil', () => {
+  const starts = songs.map((_, i) => i).filter(isRoundStart);
+  assert.deepEqual(starts, [15, 30, 55]);
+  assert.equal(isRoundStart(0), false);   // la manche 1 démarre depuis la salle d’attente
+});
+
+test('micros : 4 couleurs différentes, lettres A à D (mêmes couleurs sur téléphone et grand écran)', () => {
+  assert.deepEqual(MIC_CHOICES.map(m => m.letter), ['A', 'B', 'C', 'D']);
+  assert.equal(new Set(MIC_CHOICES.map(m => m.color)).size, 4);
+  assert.deepEqual(MIC_CHOICES.map(m => m.color), ['#FFC933', '#FF5A4E', '#FFF3D6', '#8FB0FF']);   // maquette téléphone, manche 1
 });

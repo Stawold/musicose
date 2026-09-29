@@ -6,7 +6,7 @@ import "./styles/tokens.css";
 
 import {
   ROUND_NAMES as roundNames, ROUND_CONFIG, TOTAL_SONGS, MIC_CHOICES,
-  roundForIndex, isEndOfRound, isCorrect, isArtistCorrect,
+  roundForIndex, isEndOfRound, isRoundStart, isCorrect, isArtistCorrect,
   scoreTextAnswer, round3BonusForPosition, scoreChoiceRound,
   buildOptions, themeFor, adjustedScores, POINTS,
   generateGameCode, peerIdFromCode,
@@ -83,6 +83,14 @@ export default function Host() {
       try { conn.send({ type: "lobbyState", shortCode: shortCodeRef.current, players: playerList }); } catch (e) { /* ignore */ }
     });
   }, [players, geConnections]);
+
+  // Liste des joueurs connectés, affichée sur l'écran d'attente des téléphones
+  useEffect(() => {
+    const playerList = Object.values(players).map(p => ({ pseudo: p.pseudo }));
+    Object.values(connBySessionRef.current).forEach(c => {
+      try { c.send({ type: "lobbyPlayers", players: playerList }); } catch (e) { /* ignore */ }
+    });
+  }, [players, connections]);
 
   const HOST_PASSWORD = "melbose";
   const KVDB_BASE = "https://kvdb.io/GVkYCf2Kfn44jq3EYGweRj/";
@@ -178,6 +186,18 @@ export default function Host() {
   const adjustScore = (sessionId, delta) => {
     const updated = applyPoints(sessionId, currentRoundRef.current, delta);
     if (updated) sendToSession(sessionId, { type: "scoreUpdate", totalScore: updated.totalScore });
+  };
+
+  // « 4 ont déjà répondu » (manche 3) et « 11 / 16 en lice » (manche 4), pour les téléphones
+  const computeStatus = () => {
+    const ps = Object.values(playersRef.current);
+    return { answered: Object.keys(answeredRef.current).length, total: ps.length, alive: ps.filter(p => p.activeRound4 !== false).length };
+  };
+  const broadcastStatus = () => {
+    const status = computeStatus();
+    Object.values(connBySessionRef.current).forEach(c => {
+      try { c.send({ type: "statusUpdate", status }); } catch (e) { /* ignore */ }
+    });
   };
 
   const sendAnswersCount = (count) => {
@@ -411,6 +431,9 @@ export default function Host() {
 
               // Manche 4 : aucune bonne réponse → éliminé
               if (round === 4 && result.points === 0) {
+                if (playersRef.current[sessionId]) {
+                  playersRef.current = { ...playersRef.current, [sessionId]: { ...playersRef.current[sessionId], activeRound4: false } };
+                }
                 setPlayers(prev => prev[sessionId]
                   ? { ...prev, [sessionId]: { ...prev[sessionId], activeRound4: false } }
                   : prev);
@@ -426,6 +449,7 @@ export default function Host() {
                 totalScore: updated ? updated.totalScore : undefined,
               });
               sendAnswersCount(responsesRef.current.length + 1);
+              broadcastStatus();
             }
           } catch (e) {
             console.error("Erreur traitement data :", e);
@@ -497,7 +521,7 @@ export default function Host() {
     resetSongState();
 
     // Infos propres à la manche (les téléphones ne reçoivent jamais les titres des propositions)
-    const extra = { audioSeconds: cfg.audio };
+    const extra = { audioSeconds: cfg.audio, status: computeStatus() };
     let geExtra = {};
     if (currentRound === 1) {
       const built = buildOptions(playlist.songs, currentSongIndex);
@@ -570,7 +594,7 @@ export default function Host() {
     }
 
     playerConnections().forEach(c => {
-      try { c.send({ type: "revealAnswer", title: songToReveal.title, artist: songToReveal.artist, ...playerExtra }); } catch (e) {}
+      try { c.send({ type: "revealAnswer", title: songToReveal.title, artist: songToReveal.artist, leaderboard: buildRanking(), ...playerExtra }); } catch (e) {}
     });
     geConnections.forEach(c => {
       try { c.send({ type: "revealAnswer", title: songToReveal.title, artist: songToReveal.artist, stats, songIndex: currentSongIndex, ...geExtra }); } catch (e) { /* ignore */ }
@@ -616,14 +640,21 @@ export default function Host() {
   const nextSong = () => {
     if (!playlist || currentSongIndex >= lastSongIndex) return;
     finalizeRound1();
+    const newIdx = currentSongIndex + 1;
     const songToReveal = playlist.songs[currentSongIndex];
     if (songToReveal) {
       const correctIndex = currentRound === 1 && roundOptionsRef.current ? { correctIndex: roundOptionsRef.current.correctIndex } : {};
       playerConnections().forEach(c => {
-        try { c.send({ type: "revealAnswer", title: songToReveal.title, artist: songToReveal.artist, ...correctIndex }); } catch (e) {}
+        try { c.send({ type: "revealAnswer", title: songToReveal.title, artist: songToReveal.artist, leaderboard: buildRanking(), ...correctIndex }); } catch (e) {}
       });
     }
-    goToSong(currentSongIndex + 1);
+    goToSong(newIdx);
+    // Début d'une nouvelle manche : le grand écran repasse par l'accueil, la prochaine manche clignote
+    if (isRoundStart(newIdx)) {
+      geConnections.forEach(c => {
+        try { c.send({ type: "showHome", next: roundForIndex(newIdx) }); } catch (e) { /* ignore */ }
+      });
+    }
   };
 
   const previousSong = () => {

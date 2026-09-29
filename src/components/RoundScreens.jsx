@@ -1,6 +1,6 @@
 import React from "react";
 import { MIC_CHOICES, MAX_PLAYERS, joinUrl, progressForIndex, ROUND_CONFIG, TOTAL_SONGS } from "../gameLogic";
-import { ROUND_THEMES, roundSeconds, buildBars, rnd, formatSeconds } from "../roundThemes";
+import { ROUND_THEMES, BASE_THEME, PILL_COLORS, roundSeconds, buildBars, rnd, formatSeconds } from "../roundThemes";
 import MicIcon from "./MicIcon";
 import QrCode from "./QrCode";
 import "../styles/grandEcran.css";
@@ -52,15 +52,15 @@ function Bar({ children, m, top }) {
   return <div style={{ ...base, ...(top ? { top: 0, borderBottom: `1px solid ${m.b}`, zIndex: 2, padding: '20px 36px' } : { bottom: 0, borderTop: `1px solid ${m.b}` }) }}>{children}</div>;
 }
 
-const Sun = ({ m, size, left, right, top }) => (
+const Sun = ({ m, size, left, right, top, gradient, opacity }) => (
   <div style={{
     position: 'absolute', left, right, top, width: size, height: size, borderRadius: '50%',
-    background: `linear-gradient(${m.a},${m.b})`, WebkitMask: SUN_MASK, mask: SUN_MASK, opacity: m.sunOp,
+    background: gradient || `linear-gradient(${m.a},${m.b})`, WebkitMask: SUN_MASK, mask: SUN_MASK, opacity: opacity ?? m.sunOp,
   }} />
 );
 
-const GridFloor = ({ m, top, height }) => (
-  <div style={{
+const GridFloor = ({ m, top, height, scroll }) => (
+  <div className={scroll ? 'ge-grid-scroll' : undefined} style={{
     position: 'absolute', left: -200, right: -200, top, height,
     transform: 'perspective(400px) rotateX(62deg)', transformOrigin: 'top',
     background: `repeating-linear-gradient(90deg,${m.gridA} 0 2px,transparent 2px 80px),repeating-linear-gradient(0deg,${m.gridB} 0 2px,transparent 2px 60px)`,
@@ -266,35 +266,93 @@ export function ScreenRound({ code, round, remaining, answers, players, progress
   );
 }
 
-/* ── Transition : annonce de la manche ────────────────────── */
+/* ── Annonce de la manche (maquette « Transitions ») ───────── */
 export function ScreenTransition({ round, code }) {
   const m = ROUND_THEMES[round];
   const size = ROUND_CONFIG[round].end - ROUND_CONFIG[round].start + 1;
+  const bars = buildBars(round, null);
   return (
     <Stage m={m}>
-      <Sun m={m} size={420} right={80} top={110} />
-      <GridFloor m={m} top={470} height={400} />
-      <div style={{
-        position: 'absolute', inset: 0,
-        background: `repeating-linear-gradient(180deg,transparent 0 30px,${m.gridB} 30px 32px)`,
-        WebkitMask: 'linear-gradient(90deg,#000,transparent 60%)', mask: 'linear-gradient(90deg,#000,transparent 60%)',
-      }} />
+      <Sun m={m} size={380} right={110} top={100} gradient={m.sun} opacity={round === 2 ? 0.35 : 0.9} />
+      <GridFloor m={{ ...m, gridA: m.annGrid, gridB: m.annGrid }} top={440} height={500} scroll />
       <Bar m={m} top>
         <span>MANCHE {pad2(round)} · {size} QUESTIONS · {pad2(ROUND_CONFIG[round].start + 1)} → {pad2(ROUND_CONFIG[round].end + 1)} / {TOTAL_SONGS}</span>
         <span>{brand(code)}</span>
       </Bar>
-      <div style={{ position: 'absolute', left: 70, top: 100, display: 'flex', flexDirection: 'column', gap: 18 }}>
-        <div style={{ font: `italic 800 180px/.8 ${TEKTUR}`, color: m.b }}>{pad2(round)}</div>
-        <div style={{ font: `italic 800 110px/.9 ${TEKTUR}`, textShadow: `6px 6px 0 ${m.a}`, whiteSpace: 'nowrap' }}>{m.t1}<br />{m.t2}</div>
-        <div style={{ font: `500 28px/1.5 ${MONO}`, background: m.bg, padding: '4px 0', maxWidth: 760 }}>{m.rule}</div>
+      <div style={{ position: 'absolute', left: 70, top: 78, display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div className="ge-pop" style={{ font: `italic 800 150px/.8 ${TEKTUR}`, color: round === 4 ? m.a : m.b, transformOrigin: 'left bottom' }}>{pad2(round)}</div>
+        <div className="ge-lift" style={{ font: `italic 800 96px/.9 ${TEKTUR}`, textShadow: `6px 6px 0 ${m.a}`, whiteSpace: 'nowrap' }}>{m.t1}<br />{m.t2}</div>
+        <div className="ge-fade" style={{ font: `500 24px/1.5 ${MONO}`, maxWidth: 680, animationDelay: '.4s' }}>{m.rule}</div>
       </div>
-      <JoinTile m={m} code={code} side="right" />
+      <BarsRow bars={bars} fill={m.bars.fill} glow={m.bars.glow} gap={m.bars.gap} />
+      <JoinTile m={m} code={code} side="left" bottom={64} />
       <Bar m={m}>
         <span>{roundSeconds(round)} S</span>
         <span>{m.pts}</span>
       </Bar>
     </Stage>
   );
+}
+
+/* Égaliseur du bas d'écran (barres animées en CSS) */
+function BarsRow({ bars, fill, glow, gap, height = 150, colors }) {
+  return (
+    <div style={{
+      position: 'absolute', left: 200, right: 36, bottom: 72, height, display: 'flex', justifyContent: 'center',
+      gap, alignItems: 'flex-end', WebkitBoxReflect: 'below 4px linear-gradient(transparent 40%,rgba(255,255,255,.3))',
+    }}>
+      {bars.map((b, i) => (
+        <div key={i} className="ge-bar" style={{ flex: 1, height: `${b.h}%`, transformOrigin: 'bottom left', '--dur': `${b.dur}s`, '--delay': `${b.delay}s` }}>
+          <div style={{ width: '100%', height: '100%', transformOrigin: 'bottom', background: colors ? colors[i % colors.length] : fill, boxShadow: `0 0 12px ${colors ? colors[i % colors.length] : glow}` }} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ── Effets de passage d'une manche à l'autre (maquette « Transitions ») ── */
+const easeInOutCubic = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+const cl01 = (v) => Math.max(0, Math.min(1, v));
+
+// p : progression 0 → 1 ; l'écran change au milieu (p = 0,5). k : 0 rayons, 1 iris, 2 bandes de vitesse, 3 zone rouge.
+export function TransitionOverlay({ k, p, reduced }) {
+  if (p <= 0 || p >= 1) return null;
+  const c = p < 0.5 ? easeInOutCubic(p * 2) : 1 - easeInOutCubic((p - 0.5) * 2);
+  const full = { position: 'absolute', inset: 0, pointerEvents: 'none' };
+  const wrap = (children) => (
+    <div data-transition={k} style={{ position: 'absolute', left: 0, top: 0, width: 1280, height: 720, transform: 'scale(1.5)', transformOrigin: '0 0', overflow: 'hidden', pointerEvents: 'none', zIndex: 20 }}>{children}</div>
+  );
+  if (reduced) return wrap(<div style={{ ...full, background: ROUND_THEMES[k + 1].bg, opacity: c }} />);
+  if (k === 0) return wrap(
+    <div style={full}>
+      <div style={{
+        position: 'absolute', left: 640 - 800, top: 360 - 800, width: 1600, height: 1600, borderRadius: '50%',
+        background: 'radial-gradient(circle,#FFC933 0 46%,transparent 46.2%),repeating-conic-gradient(#FFC933 0 5deg,#FF5A4E 5deg 7deg,transparent 7deg 15deg)',
+        transform: `scale(${c * 1.25}) rotate(${p * 120}deg)`,
+      }} />
+    </div>);
+  if (k === 1) {
+    const R = (1 - c) * 760;
+    return wrap(
+      <div style={full}>
+        <div style={{ ...full, background: `radial-gradient(circle at 50% 50%,transparent ${R}px,#0A0A0D ${R + 1}px)` }} />
+        {[0, 14, 30].map(d => <div key={d} style={{ position: 'absolute', left: 640 - R - d, top: 360 - R - d, width: 2 * (R + d), height: 2 * (R + d), borderRadius: '50%', border: '1px solid rgba(244,235,217,.5)' }} />)}
+      </div>);
+  }
+  if (k === 2) return wrap(
+    <div style={{ ...full, overflow: 'hidden' }}>
+      {Array.from({ length: 9 }, (_, i) => {
+        const st = i * 0.05;
+        const x = p < 0.5 ? -1 + easeInOutCubic(cl01((p * 2 - st) / 0.6)) : easeInOutCubic(cl01(((p - 0.5) * 2 - st) / 0.6));
+        return <div key={i} style={{ position: 'absolute', left: 0, top: i * 80, width: '100%', height: 81, background: ['#00E5FF', '#FF2E93', '#140A3C'][i % 3], transform: `translateX(${x * 115}%) skewX(-18deg)` }} />;
+      })}
+    </div>);
+  const R = (1 - c) * 760;
+  return wrap(
+    <div style={full}>
+      <div style={{ ...full, background: `radial-gradient(circle at 50% 50%,transparent ${R}px,#E10600 ${R + 1}px)` }} />
+      {[0, 40].map(d => <div key={d} style={{ position: 'absolute', left: 640 - R - d, top: 360 - R - d, width: 2 * (R + d), height: 2 * (R + d), borderRadius: '50%', border: '3px dashed #F4EBD9', transform: `rotate(${p * 60}deg)` }} />)}
+    </div>);
 }
 
 /* ═══ Écrans hors chanson, dans le même style ═══════════════════════════ */
@@ -316,8 +374,8 @@ function DancingLogo({ m, size = 64 }) {
     <div aria-label="Music'Ose" style={{ font: `italic 800 ${size}px/1 ${TEKTUR}`, whiteSpace: 'nowrap', position: 'relative' }}>
       {letters.map((ch, i) => (
         <span key={i} className="ge-dance" style={{
-          '--i': i, color: ch === "'" ? m.b : i % 2 ? m.fg : m.b,
-          textShadow: `3px 3px 0 ${m.a}, 0 0 18px ${m.a}88`,
+          '--i': i, color: ch === "'" ? m.b : m.fg,
+          textShadow: `${Math.max(3, Math.round(size / 25))}px ${Math.max(3, Math.round(size / 25))}px 0 ${m.a}, 0 0 18px ${m.a}88`,
         }}>{ch}</span>
       ))}
       {['♪', '♫', '♪'].map((n, i) => (
@@ -327,22 +385,73 @@ function DancingLogo({ m, size = 64 }) {
   );
 }
 
-/* Salle d'attente : code très grand + QR code + logo dansant */
+/* ── Accueil (maquette « Transitions ») : salle d'attente et écran entre les manches ── */
+const HOME = { ...BASE_THEME, gridA: BASE_THEME.grid, gridB: BASE_THEME.grid, panel: 'rgba(14,11,31,.88)', sunOp: 0.9 };
+const homeBars = (n) => Array.from({ length: n }, (_, i) => ({ h: 100, dur: (1 + rnd(i + 3) * 0.8).toFixed(2), delay: (-rnd(i + 11) * 2).toFixed(2) }));
+
+// Pastilles 01-04 : la prochaine manche est pleine et clignote
+function RoundPills({ next, size = 'lg' }) {
+  const lg = size === 'lg';
+  return (
+    <div style={{ display: 'flex', gap: lg ? 12 : 8 }}>
+      {[1, 2, 3, 4].map(r => {
+        const col = PILL_COLORS[r];
+        const isNext = r === next;
+        return (
+          <div key={r} className={isNext ? 'ge-blink' : undefined} data-pill={r} data-next={isNext ? 'true' : 'false'} style={{
+            padding: lg ? '10px 16px' : '4px 10px', border: `2px solid ${col}`, background: isNext ? col : 'transparent',
+            color: isNext ? ROUND_THEMES[r].bg : HOME.fg, font: `500 ${lg ? 18 : 14}px ${MONO}`, letterSpacing: '.1em',
+          }}>{pad2(r)}</div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* Entre deux manches : retour à l'accueil, la prochaine manche clignote */
+export function ScreenHome({ code, next }) {
+  const m = HOME;
+  return (
+    <Stage m={m}>
+      <Sun m={m} size={380} right={110} top={100} gradient={BASE_THEME.sun} />
+      <GridFloor m={m} top={440} height={500} scroll />
+      <Bar m={m} top><span>ACCUEIL</span><span>{brand(code)}</span></Bar>
+      <div style={{ position: 'absolute', left: 70, top: 110, display: 'flex', flexDirection: 'column', gap: 22 }}>
+        <div className="ge-lift" style={{ font: `500 22px ${MONO}`, letterSpacing: '.3em' }}>BLIND TEST LIVE</div>
+        <DancingLogo m={m} size={150} />
+        <div className="ge-lift" style={{ marginTop: 10, animationDelay: '.15s' }}><RoundPills next={next} /></div>
+        {next && (
+          <div className="ge-fade" style={{ font: `500 20px ${MONO}`, letterSpacing: '.2em', color: PILL_COLORS[next], animationDelay: '.5s' }}>
+            PROCHAINE MANCHE · {ROUND_THEMES[next].label}
+          </div>
+        )}
+      </div>
+      <BarsRow bars={homeBars(28)} gap={6} colors={BASE_THEME.bars} />
+      <JoinTile m={m} code={code} side="left" />
+      <Bar m={m}><span>4 MANCHES</span><span>PRÊTS ?</span></Bar>
+    </Stage>
+  );
+}
+
+/* Salle d'attente : accueil + code très grand + QR code + joueurs connectés */
 export function ScreenLobby({ code, players }) {
-  const m = BRAND;
+  const m = HOME;
   const url = code ? joinUrl(window.location.origin, window.location.pathname, code) : null;
   const shown = players.slice(0, MAX_PLAYERS);
   return (
     <Stage m={m}>
-      <GridFloor m={m} top={470} height={400} />
+      <GridFloor m={m} top={470} height={400} scroll />
       <Bar m={m} top><span>SALLE OUVERTE</span><span>MUSIC'OSE</span></Bar>
 
-      <div style={{ position: 'absolute', left: 48, top: 92 }}><DancingLogo m={m} size={62} /></div>
+      <div style={{ position: 'absolute', left: 48, top: 84 }}>
+        <div style={{ font: `500 18px ${MONO}`, letterSpacing: '.3em', marginBottom: 8 }}>BLIND TEST LIVE</div>
+        <DancingLogo m={m} size={70} />
+      </div>
 
-      <div style={{ position: 'absolute', left: 48, top: 190 }}>
+      <div style={{ position: 'absolute', left: 48, top: 206 }}>
         <div style={{ font: `500 18px ${MONO}`, letterSpacing: '.35em', color: m.a }}>CODE DE LA PARTIE</div>
         <div style={{ font: `800 150px/1 ${TEKTUR}`, color: m.b, letterSpacing: '.01em', marginTop: 6, textShadow: `0 0 30px ${m.b}66` }}>{code || '—'}</div>
-        <div style={{ font: `500 22px/1.4 ${MONO}`, marginTop: 8 }}>Scanne le QR code, ou entre ce code sur ton téléphone.</div>
+        <div style={{ font: `500 22px/1.4 ${MONO}`, marginTop: 6 }}>Scanne le QR code, ou entre ce code sur ton téléphone.</div>
       </div>
 
       <div style={{ position: 'absolute', right: 48, top: 96, textAlign: 'center' }}>
@@ -352,19 +461,30 @@ export function ScreenLobby({ code, players }) {
         <div style={{ font: `500 16px ${MONO}`, letterSpacing: '.3em', color: m.b, marginTop: 12 }}>SCANNE POUR REJOINDRE</div>
       </div>
 
-      <div style={{ position: 'absolute', left: 48, right: 48, top: 452, bottom: 78 }}>
-        <div style={{ font: `500 18px ${MONO}`, letterSpacing: '.25em', color: m.a, marginBottom: 12 }}>{players.length} / {MAX_PLAYERS} JOUEUR·SES</div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px 16px', alignContent: 'flex-start', overflow: 'hidden', maxHeight: 118 }}>
+      <div style={{ position: 'absolute', left: 48, right: 48, top: 474 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+          <div style={{ font: `500 18px ${MONO}`, letterSpacing: '.25em', color: m.a }}>{players.length} / {MAX_PLAYERS} JOUEUR·SES</div>
+          <RoundPills next={1} size="sm" />
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 12px', alignContent: 'flex-start', overflow: 'hidden', maxHeight: 96 }}>
           {shown.map((pl, i) => (
-            <div key={pl.pseudo + i} className="ge-pop" style={{ display: 'flex', alignItems: 'center', gap: 8, background: m.panel, padding: '4px 12px 4px 4px', border: `1px solid ${AVATARS[i % AVATARS.length]}` }}>
+            <div key={pl.pseudo + i} className="ge-pop" style={{ display: 'flex', alignItems: 'center', gap: 8, background: m.panel, padding: '3px 12px 3px 3px', border: `1px solid ${BASE_THEME.bars[i % 4]}` }}>
               <div style={{
-                width: 34, height: 34, borderRadius: '50%', background: AVATARS[i % AVATARS.length], color: m.bg,
-                display: 'flex', alignItems: 'center', justifyContent: 'center', font: `800 13px ${TEKTUR}`,
+                width: 30, height: 30, background: BASE_THEME.bars[i % 4], color: m.bg,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', font: `800 12px ${TEKTUR}`,
               }}>{(pl.pseudo || '?').slice(0, 2).toUpperCase()}</div>
-              <span style={{ font: `500 16px ${MONO}`, maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pl.pseudo}</span>
+              <span style={{ font: `500 15px ${MONO}`, maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pl.pseudo}</span>
             </div>
           ))}
         </div>
+      </div>
+
+      <div style={{ position: 'absolute', left: 36, right: 36, bottom: 72, height: 44, display: 'flex', gap: 6, alignItems: 'flex-end' }}>
+        {homeBars(28).map((b, i) => (
+          <div key={i} className="ge-bar" style={{ flex: 1, height: '100%', transformOrigin: 'bottom left', '--dur': `${b.dur}s`, '--delay': `${b.delay}s` }}>
+            <div style={{ width: '100%', height: '100%', transformOrigin: 'bottom', background: BASE_THEME.bars[i % 4] }} />
+          </div>
+        ))}
       </div>
 
       <Bar m={m}><span>EN ATTENTE DU LANCEMENT PAR L'HÔTE</span><span>4 MANCHES · {TOTAL_SONGS} QUESTIONS</span></Bar>

@@ -128,31 +128,9 @@ export default function App() {
   }
 
   if (mode === "player") {
-    return (
-      <div>
-        <Player />
-        <button
-          onClick={handleResetMode}
-          style={{
-            position: "fixed",
-            bottom: 20,
-            right: 20,
-            padding: "0.5rem 1.2rem",
-            fontSize: "0.85rem",
-            fontFamily: "var(--mo-font-display)",
-            background: "var(--mo-gold)",
-            color: "var(--mo-bg-0)",
-            border: "none",
-            borderRadius: "var(--mo-r-pill)",
-            cursor: "pointer",
-            zIndex: 1000,
-            letterSpacing: "0.05em",
-          }}
-        >
-          CHANGER DE MODE
-        </button>
-      </div>
-    );
+    // Pas de bouton flottant côté joueur : il masquait les boutons du bas de l'écran.
+    // Le changement de mode se fait depuis l'écran de connexion.
+    return <Player onResetMode={handleResetMode} />;
   }
 
   // --- HOME SCREEN ---
