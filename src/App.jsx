@@ -3,6 +3,7 @@ import { Btn, Chip, Eyebrow, Stars, GridFloor, Eq } from "./components/MoUI";
 import Host from "./host";
 import Player from "./player";
 import GrandEcran from "./grandEcran";
+import { parseJoinCode } from "./gameLogic";
 import "./styles/tokens.css";
 
 function RoleCard({ title, description, buttonLabel, variant, label, icon, onClick }) {
@@ -74,6 +75,12 @@ export default function App() {
   const [mode, setMode] = useState("");
 
   useEffect(() => {
+    // Lien du QR code (?join=OSE-XXXX) : on arrive directement côté joueur
+    if (parseJoinCode(window.location.search)) {
+      setMode("player");
+      localStorage.setItem("musicose_mode", "player");
+      return;
+    }
     const savedMode = localStorage.getItem("musicose_mode");
     if (savedMode) setMode(savedMode);
   }, []);

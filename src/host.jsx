@@ -128,11 +128,14 @@ export default function Host() {
     }
   };
 
+  // Le grand écran figure aussi dans `connections` : on ne l'écrit qu'une fois, via geConnections
+  const playerConnections = () => connections.filter(c => !geConnections.includes(c));
+
   const sendRankingToPlayers = () => {
     const ranking = Object.values(playersRef.current)
       .sort((a, b) => (b.totalScore || 0) - (a.totalScore || 0))
       .map(p => ({ pseudo: p.pseudo, score: p.totalScore }));
-    connections.forEach(conn => {
+    playerConnections().forEach(conn => {
       try { conn.send({ type: "showRanking", ranking }); } catch (e) { /* ignore */ }
     });
     geConnections.forEach(conn => {
@@ -215,7 +218,7 @@ export default function Host() {
 
   const sendFinalRanking = () => {
     const ranking = buildRanking();
-    connections.forEach(conn => {
+    playerConnections().forEach(conn => {
       try { conn.send({ type: "showFinalRanking", ranking }); } catch (e) { /* ignore */ }
     });
     geConnections.forEach(conn => {
@@ -509,7 +512,7 @@ export default function Host() {
     }
     songPayloadRef.current = extra;
 
-    connections.forEach(conn =>
+    playerConnections().forEach(conn =>
       conn.send({ type: "startTimer", seconds: duration, songIndex: currentSongIndex, round: currentRound, ...extra })
     );
     geConnections.forEach(conn =>
@@ -566,11 +569,11 @@ export default function Host() {
       stats = { parfait, bien, rate, sans: Math.max(0, totalPlayers - responses.length) };
     }
 
-    connections.forEach(c => {
+    playerConnections().forEach(c => {
       try { c.send({ type: "revealAnswer", title: songToReveal.title, artist: songToReveal.artist, ...playerExtra }); } catch (e) {}
     });
     geConnections.forEach(c => {
-      try { c.send({ type: "revealAnswer", title: songToReveal.title, artist: songToReveal.artist, stats, ...geExtra }); } catch (e) { /* ignore */ }
+      try { c.send({ type: "revealAnswer", title: songToReveal.title, artist: songToReveal.artist, stats, songIndex: currentSongIndex, ...geExtra }); } catch (e) { /* ignore */ }
     });
 
     setRevealed(true);
@@ -616,7 +619,7 @@ export default function Host() {
     const songToReveal = playlist.songs[currentSongIndex];
     if (songToReveal) {
       const correctIndex = currentRound === 1 && roundOptionsRef.current ? { correctIndex: roundOptionsRef.current.correctIndex } : {};
-      connections.forEach(c => {
+      playerConnections().forEach(c => {
         try { c.send({ type: "revealAnswer", title: songToReveal.title, artist: songToReveal.artist, ...correctIndex }); } catch (e) {}
       });
     }

@@ -206,3 +206,22 @@ export const generateGameCode = (rng = Math.random) =>
 export const peerIdFromCode = (code) => 'musicose-' + String(code).trim().toUpperCase();
 
 export const isGameCode = (code) => /^OSE-[A-Z0-9]{4}$/i.test(String(code).trim());
+
+// ── Progression dans la partie ─────────────────────────────────
+// Numéro de la question dans sa manche (ex. 3/15) et dans toute la partie (ex. 18/65).
+export const progressForIndex = (songIndex) => {
+  const idx = Math.max(0, Math.min(TOTAL_SONGS - 1, Number.isInteger(songIndex) ? songIndex : 0));
+  const round = roundForIndex(idx);
+  const { start, end } = ROUND_CONFIG[round];
+  return { round, number: idx - start + 1, size: end - start + 1, global: idx + 1, total: TOTAL_SONGS };
+};
+
+// ── Lien d'invitation (QR code) ────────────────────────────────
+export const joinUrl = (origin, pathname, code) =>
+  `${origin}${pathname || '/'}?join=${encodeURIComponent(String(code).trim().toUpperCase())}`;
+
+// Code de partie contenu dans une URL (?join=OSE-XXXX), ou null s'il est absent ou invalide
+export const parseJoinCode = (search) => {
+  const c = new URLSearchParams(search).get('join');
+  return c && isGameCode(c) ? c.trim().toUpperCase() : null;
+};

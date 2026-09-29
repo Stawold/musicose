@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Peer } from "peerjs";
 import { Btn, Input, Panel, Eyebrow, Chip, Eq, Stars, GridFloor } from "./components/MoUI";
 import { peerConfig } from "./peerConfig";
 import "./styles/tokens.css";
 
 import {
-  ROUND_NAMES as roundNames, MIC_CHOICES, isCorrect, isArtistCorrect, isGameCode, peerIdFromCode,
+  ROUND_NAMES as roundNames, MIC_CHOICES, isCorrect, isArtistCorrect, isGameCode, peerIdFromCode, parseJoinCode,
 } from "./gameLogic";
 import MicIcon from "./components/MicIcon";
 import useWakeLock from "./useWakeLock";
@@ -34,6 +34,8 @@ const getAvatarInputColor = (color) => {
 };
 
 export default function Player() {
+  const joinFromUrl = useRef(parseJoinCode(window.location.search));
+  const autoJoinPending = useRef(Boolean(joinFromUrl.current));
   const [joinStep, setJoinStep] = useState("pseudo");
   const [pseudoInput, setPseudoInput] = useState("");
   const [codeInput, setCodeInput] = useState("");
@@ -88,7 +90,17 @@ export default function Player() {
         localStorage.removeItem("musicose_session");
       }
     }
+    // Arrivée par QR code : le code de la partie est déjà connu
+    if (joinFromUrl.current) setCodeInput(joinFromUrl.current);
   }, []);
+
+  // QR code : dès que le pseudo est connu, on se connecte sans demander le code
+  useEffect(() => {
+    if (autoJoinPending.current && joinStep === "code" && joinFromUrl.current && codeInput === joinFromUrl.current && pseudo) {
+      autoJoinPending.current = false;
+      handleJoinGame();
+    }
+  }, [joinStep, codeInput, pseudo]);
 
   const handleJoinGame = async () => {
     if (joinStep === "pseudo") {

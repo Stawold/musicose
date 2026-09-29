@@ -103,6 +103,12 @@ try {
   const lobbyText = (await ge.locator('body').innerText()).replace(/\s+/g, ' ');
   check('grand écran : salle d’attente (code, joueurs, pseudos)', lobbyText.includes(CODE) && /SALLE OUVERTE/.test(lobbyText) && /3 \/ 30/.test(lobbyText) && ['Alice', 'Bob', 'Cleo'].every(n => lobbyText.includes(n)), lobbyText.slice(0, 250));
   await shot(ge, 'ge-lobby');
+  const qrUrl = await ge.locator('svg[data-url]').first().getAttribute('data-url');
+  check('salle d’attente : QR code présent, il contient le lien de la partie', qrUrl && qrUrl.includes(`?join=${CODE}`), String(qrUrl));
+  const dancing = await ge.evaluate(() => document.getAnimations().filter(a => a.animationName === 'ge-dance').length);
+  check('salle d’attente : logo Music’Ose animé (9 lettres qui dansent)', dancing === 9, String(dancing));
+  const codeBox = await ge.evaluate(() => { const el = [...document.querySelectorAll('div')].find(d => /^OSE-\w{4}$/.test(d.textContent) && d.children.length === 0); const r = el.getBoundingClientRect(); return { w: r.width, h: r.height }; });
+  check('salle d’attente : code en très grand', codeBox.h > 60 && codeBox.w > 300, JSON.stringify(codeBox));
 
   // ── Helpers ────────────────────────────────────────────────
   const hostScore = (name) => host.evaluate((name) => {
@@ -148,6 +154,13 @@ try {
   await shot(ge, 'ge-transition1');
   await start();
   await shot(ge, 'ge-manche1'); await shot(alice, 'tel-manche1');
+  const boxes = await ge.evaluate(() => [...document.querySelectorAll('[data-option]')].map(el => { const r = el.getBoundingClientRect(); return { w: Math.round(r.width), h: Math.round(r.height) }; }));
+  check('manche 1 : les 4 propositions occupent une grande place (≥ 400×200 px sur un écran 1280×720)', boxes.length === 4 && boxes.every(b => b.w >= 400 && b.h >= 200), JSON.stringify(boxes));
+  const barH = await ge.evaluate(() => Math.max(...[...document.querySelectorAll('.ge-bar')].map(b => b.getBoundingClientRect().height)));
+  check('manche 1 : barre de son réduite (≤ 70 px)', barH <= 70, String(barH));
+  const geR1 = (await ge.locator('body').innerText()).replace(/\s+/g, ' ');
+  check('manche 1 : numéro de question et total toujours visibles (1/15 · 1/65)', /QUESTION 01\/15 · TOTAL 01\/65/.test(geR1), geR1.slice(0, 200));
+  check('en cours de partie : QR code et code de partie restent affichés', await ge.locator('svg[data-url]').count() === 1 && geR1.includes(CODE) && /REJOINS/.test(geR1));
   const micCount = await alice.getByRole('button', { name: /^Proposition / }).count();
   check('téléphone : 4 micros affichés', micCount === 4, String(micCount));
   check('téléphone : aucun champ texte en manche 1', await alice.getByPlaceholder('Titre de la chanson…').count() === 0);
@@ -170,6 +183,7 @@ try {
   check('grand écran : compteur de réponses', /3\/3 RÉPONSES/.test((await ge.locator('body').innerText()).replace(/\s+/g, ' ')));
   await reveal();
   await shot(ge, 'ge-reveal1');
+  check('révélation : numéro de question toujours visible', /QUESTION 01\/15 · TOTAL 01\/65/.test((await ge.locator('body').innerText()).replace(/\s+/g, ' ')));
   let s = await scores();
   check('Alice : 1 pt + 1 bonus (dernier choix juste, plus rapide)', s.a === 2, JSON.stringify(s));
   check('Cleo : 1 pt, pas de bonus', s.c === 1, JSON.stringify(s));
@@ -214,6 +228,10 @@ try {
   const stText = (await ge.locator('body').innerText()).replace(/\s+/g, ' ');
   check('grand écran : classement affiché (après la manche 01, joueurs classés avec points)', /CLASSEMENT/.test(stText) && /APRÈS LA MANCHE 01/.test(stText) && /Cleo/.test(stText) && /PTS/.test(stText), stText.slice(0, 250));
   await shot(ge, 'ge-classement');
+  await sleep(2600);
+  const posOf = () => ge.evaluate(() => Object.fromEntries([...document.querySelectorAll('[data-standing]')].map(el => [el.dataset.standing, Number(el.dataset.pos)])));
+  const pos1 = await posOf();
+  check('classement : QR code toujours visible', await ge.locator('svg[data-url]').count() === 1);
   await alice.getByRole('button', { name: /Continuer/ }).click();
   await next();                 // index 15 → manche 2
   check('la manche 2 démarre à la 16e chanson', await host.locator('text=/MANCHE 2 · CHANSON 1\\/15/').count() > 0);
@@ -238,12 +256,34 @@ try {
   check('manche 2 : 2 pts + 1 bonus au plus rapide, 2 pts au suivant, 0 sinon', same(d2, { a: 3, b: 0, c: 2 }), JSON.stringify(d2));
   await reveal();
 
+  // Classement de fin de manche 2 : le dernier passe en tête grâce à l'ajustement manuel → les lignes glissent
+  await next(14);               // index 29 (30e chanson)
+  const sc2 = await scores();
+  const byName = { Alice: sc2.a, Bob: sc2.b, Cleo: sc2.c };
+  const leaderScore = Math.max(...Object.values(byName));
+  const lastName = Object.entries(byName).sort((x, y) => x[1] - y[1])[0][0];
+  for (let i = 0; i < leaderScore - byName[lastName] + 1; i++) { await adj(lastName, '+1'); await sleep(60); }
+  await sleep(300);
+  await clickHost(/MONTRER LE CLASSEMENT/); await sleep(450);
+  const startPos = await posOf();
+  await shot(ge, 'ge-classement-avant');
+  await sleep(3200);
+  const endPos = await posOf();
+  await shot(ge, 'ge-classement-apres');
+  check('classement : il repart de l’ancien classement', same(Object.entries(startPos).sort(), Object.entries(pos1).sort()), `${JSON.stringify(startPos)} vs ${JSON.stringify(pos1)}`);
+  check(`classement : ${lastName} (dernier) glisse jusqu’à la 1re place`, startPos[lastName] === 2 && endPos[lastName] === 0, `${JSON.stringify(startPos)} → ${JSON.stringify(endPos)}`);
+  check('classement : indicateur de progression (▲2)', /▲2/.test(await ge.locator('body').innerText()));
+
   // ═══ MANCHE 3 — Fast & Musicous ════════════════════════════
   console.log('\nManche 3 — Fast & Musicous');
-  await next(15);               // index 30
+  await next();                 // index 30
   check('la manche 3 démarre à la 31e chanson', await host.locator('text=/MANCHE 3 · CHANSON 1\\/25/').count() > 0);
   await start();
   check('téléphone : 45 s', /(44|45)s restantes/.test(await alice.locator('body').innerText()));
+  const geR3start = (await ge.locator('body').innerText()).replace(/\s+/g, ' ');
+  check('manche 3 : numéro de question et total (1/25 · 31/65)', /QUESTION 01\/25 · TOTAL 31\/65/.test(geR3start), geR3start.slice(0, 200));
+  const barH3 = await ge.evaluate(() => Math.max(...[...document.querySelectorAll('.ge-bar')].map(b => b.getBoundingClientRect().height)));
+  check('manche 3 : égaliseur pleine hauteur (> 100 px)', barH3 > 100, String(barH3));
   b2 = await scores();
   await answer(alice, 'Titre 31', 'Nom31');          // titre + nom de famille → 3 + 3
   await answer(cleo, 'titre 31', 'Prenom31 Nom31');  // titre + artiste complet → 3 + 2
@@ -287,11 +327,38 @@ try {
   // Podium final
   await next(8);                // index 64
   check('podium proposé à la 65e chanson', await host.getByRole('button', { name: /AFFICHER LE PODIUM FINAL/ }).count() === 1);
-  await clickHost(/AFFICHER LE PODIUM FINAL/); await sleep(400);
+  await clickHost(/AFFICHER LE PODIUM FINAL/);
+  const tPodium = Date.now();
+  const opacities = () => ge.evaluate(() => Object.fromEntries([...document.querySelectorAll('[data-podium-rank]')].map(el => [el.dataset.podiumRank, Number(getComputedStyle(el).opacity)])));
+  const delays = await ge.evaluate(() => Object.fromEntries([...document.querySelectorAll('[data-podium-rank]')].map(el => [el.dataset.podiumRank, parseFloat(getComputedStyle(el).animationDelay)])));
+  check('podium : 3e, puis 2e, puis 1er (délais croissants)', delays[3] < delays[2] && delays[2] < delays[1], JSON.stringify(delays));
+  await sleep(1000 - (Date.now() - tPodium));
+  const o1 = await opacities();
+  await shot(ge, 'ge-podium-1');
+  check('podium à 1 s : seule la 3e place est apparue', o1[3] > 0 && o1[2] === 0 && o1[1] === 0, JSON.stringify(o1));
+  await sleep(2600 - (Date.now() - tPodium));
+  const o2 = await opacities();
+  await shot(ge, 'ge-podium-2');
+  check('podium à 2,6 s : 3e et 2e places apparues, pas encore la 1re', o2[3] === 1 && o2[2] > 0 && o2[1] === 0, JSON.stringify(o2));
+  await sleep(5300 - (Date.now() - tPodium));
+  const o3 = await opacities();
+  check('podium à 5,3 s : les trois places sont là', o3[3] === 1 && o3[2] === 1 && o3[1] === 1, JSON.stringify(o3));
   const poText = (await ge.locator('body').innerText()).replace(/\s+/g, ' ');
   check('grand écran : podium (3 premiers)', /PODIUM/.test(poText) && ['Alice', 'Bob', 'Cleo'].every(n => poText.includes(n)), poText.slice(0, 250));
   await shot(ge, 'ge-podium');
   check('téléphone : podium', /PODIUM/.test(await alice.locator('body').innerText()));
+
+  // ── Arrivée par QR code : seul le pseudo est à taper ───────
+  console.log('\nRejoindre par QR code');
+  const dana = await context.newPage();
+  await dana.setViewportSize({ width: 390, height: 850 });
+  watch(dana, 'Dana');
+  await dana.addInitScript(() => localStorage.clear());   // téléphone tout neuf
+  await dana.goto(qrUrl);
+  await dana.getByPlaceholder('Ton pseudo').fill('Dana');
+  await dana.getByRole('button', { name: /ENTRER SUR SCÈNE/ }).click();
+  await host.waitForSelector('text=4 JOUEUR', { timeout: 15000 }).then(() => check('QR code : le joueur rejoint la partie sans taper le code', true), () => check('QR code : le joueur rejoint la partie sans taper le code', false, 'pas de 4e joueur'));
+  check('QR code : le téléphone est connecté et en attente', /CONNECTÉ/.test(await dana.locator('body').innerText()));
 
   check('aucune erreur JavaScript dans les pages', errors.length === 0, errors.slice(0, 3).join(' | '));
 } catch (e) {

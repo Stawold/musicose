@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { Peer } from "peerjs";
 import { Stars } from "./components/MoUI";
 import { peerConfig } from "./peerConfig";
-import { isGameCode, peerIdFromCode } from "./gameLogic";
+import { isGameCode, peerIdFromCode, progressForIndex, ROUND_CONFIG } from "./gameLogic";
 import useWakeLock from "./useWakeLock";
 import { ScreenRound, ScreenTransition, ScreenLobby, ScreenReveal, ScreenStandings, ScreenPodium } from "./components/RoundScreens";
 import "./styles/tokens.css";
@@ -14,13 +14,13 @@ export default function GrandEcran() {
   const [players, setPlayers] = useState([]);
   const [currentRound, setCurrentRound] = useState(1);
   const [roundName, setRoundName] = useState("");
-  const [songNumber, setSongNumber] = useState(1);
-  const [totalInRound, setTotalInRound] = useState(1);
+  const [songIndex, setSongIndex] = useState(0);   // chanson en cours (0-64) : sert au « question 3/15 · 18/65 »
   const [totalSeconds, setTotalSeconds] = useState(0);
   const [secondsLeft, setSecondsLeft] = useState(0);
   const [answers, setAnswers] = useState({ count: 0, total: 0 });
   const [revealInfo, setRevealInfo] = useState(null);
   const [ranking, setRanking] = useState([]);
+  const [prevRanking, setPrevRanking] = useState(null);   // classement précédent : les lignes glissent de l'un à l'autre
   const [rankingRound, setRankingRound] = useState(1);
   const [scale, setScale] = useState(1);
   const [options, setOptions] = useState(null);   // manche 1 : 4 propositions
@@ -29,6 +29,11 @@ export default function GrandEcran() {
   const [fastestList, setFastestList] = useState([]);       // manche 3 : { pseudo, bonus, time }
 
   const stageRef = useRef(null);
+  const playersRef = useRef([]);
+  const lastRankingRef = useRef(null);
+  const phaseRef = useRef("lobby");
+  playersRef.current = players;
+  phaseRef.current = phase;
 
   useWakeLock(true); // le grand écran ne doit jamais s'éteindre
 
@@ -77,7 +82,10 @@ export default function GrandEcran() {
             break;
           case "announceRound":
             setPhase("transition");
-            if (typeof data.round === "number") setCurrentRound(data.round);
+            if (typeof data.round === "number") {
+              setCurrentRound(data.round);
+              setSongIndex(ROUND_CONFIG[data.round].start);
+            }
             break;
           case "fastestUpdate":
             setFastestList(data.list || []);
@@ -88,8 +96,7 @@ export default function GrandEcran() {
             setRevealInfo(null);
             if (typeof data.round === "number") setCurrentRound(data.round);
             if (data.roundName) setRoundName(data.roundName);
-            if (typeof data.songNumber === "number") setSongNumber(data.songNumber);
-            if (typeof data.totalInRound === "number") setTotalInRound(data.totalInRound);
+            if (typeof data.songIndex === "number") setSongIndex(data.songIndex);
             setOptions(data.options || null);
             setTheme(data.theme || "");
             setAudioSeconds(typeof data.audioSeconds === "number" ? data.audioSeconds : null);
@@ -102,13 +109,19 @@ export default function GrandEcran() {
             break;
           case "revealAnswer":
             setPhase("reveal");
+            if (typeof data.songIndex === "number") setSongIndex(data.songIndex);
             setRevealInfo({
               title: data.title || "", artist: data.artist || "", stats: data.stats || null,
               options: data.options || null, correctIndex: data.correctIndex, votes: data.votes || null,
             });
             break;
           case "showRanking":
+            // message identique déjà reçu : on ignore (évite de rejouer l'animation à l'arrivée)
+            if (phaseRef.current === "standings" && JSON.stringify(data.ranking || []) === JSON.stringify(lastRankingRef.current)) break;
             setPhase("standings");
+            // ancien classement (ou ordre d'arrivée à 0 point la première fois) pour animer le glissement
+            setPrevRanking(lastRankingRef.current || playersRef.current.map(p => ({ pseudo: p.pseudo, score: 0 })));
+            lastRankingRef.current = data.ranking || [];
             setRanking(data.ranking || []);
             if (typeof data.round === "number") setRankingRound(data.round);
             break;
@@ -135,6 +148,8 @@ export default function GrandEcran() {
     const t = setTimeout(() => setSecondsLeft(s => Math.max(0, s - 1)), 1000);
     return () => clearTimeout(t);
   }, [phase, secondsLeft]);
+
+  const progress = progressForIndex(songIndex);
 
   if (status === "error") {
     return (
@@ -168,16 +183,15 @@ export default function GrandEcran() {
                 remaining={secondsLeft}
                 answers={answers}
                 players={players}
-                songNumber={songNumber}
-                totalInRound={totalInRound}
+                progress={progress}
                 options={options}
                 theme={theme}
                 musicCut={audioSeconds !== null && currentRound === 4 && totalSeconds - secondsLeft >= audioSeconds}
                 fastestList={fastestList}
               />
             )}
-            {phase === 'reveal' && <ScreenReveal round={currentRound} info={revealInfo} code={shortCode} />}
-            {phase === 'standings' && <ScreenStandings ranking={ranking} round={rankingRound} code={shortCode} />}
+            {phase === 'reveal' && <ScreenReveal round={currentRound} info={revealInfo} code={shortCode} progress={progress} />}
+            {phase === 'standings' && <ScreenStandings ranking={ranking} prevRanking={prevRanking} round={rankingRound} code={shortCode} />}
             {phase === 'podium' && <ScreenPodium ranking={ranking} code={shortCode} />}
           </div>
         </div>

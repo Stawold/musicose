@@ -5,6 +5,7 @@ import {
   isCorrect, isArtistCorrect, scoreTextAnswer, round3BonusForPosition,
   scoreChoiceRound, buildOptions, themeFor, adjustedScores,
   generateGameCode, peerIdFromCode, isGameCode, GAME_CODE_ALPHABET,
+  progressForIndex, joinUrl, parseJoinCode,
 } from '../src/gameLogic.js';
 
 // Playlist factice de 65 chansons
@@ -162,4 +163,26 @@ test('code de partie : format OSE-XXXX, sans caractères ambigus, identifiant Pe
   assert.equal(peerIdFromCode(' ose-ab3d '), 'musicose-OSE-AB3D');   // saisie au clavier tolérante
   assert.ok(/^[A-Za-z0-9_-]+$/.test(peerIdFromCode('OSE-AB3D')));     // caractères acceptés par PeerJS
   assert.ok(!isGameCode('abc123xyz'));                                // identifiant brut : ancien comportement
+});
+
+test('progression : numéro de question dans la manche et dans la partie', () => {
+  assert.deepEqual(progressForIndex(0), { round: 1, number: 1, size: 15, global: 1, total: 65 });
+  assert.deepEqual(progressForIndex(14), { round: 1, number: 15, size: 15, global: 15, total: 65 });
+  assert.deepEqual(progressForIndex(15), { round: 2, number: 1, size: 15, global: 16, total: 65 });
+  assert.deepEqual(progressForIndex(30), { round: 3, number: 1, size: 25, global: 31, total: 65 });
+  assert.deepEqual(progressForIndex(54), { round: 3, number: 25, size: 25, global: 55, total: 65 });
+  assert.deepEqual(progressForIndex(55), { round: 4, number: 1, size: 10, global: 56, total: 65 });
+  assert.deepEqual(progressForIndex(64), { round: 4, number: 10, size: 10, global: 65, total: 65 });
+  assert.equal(progressForIndex(undefined).global, 1);   // valeur inconnue : début de partie
+  assert.equal(progressForIndex(500).global, 65);        // jamais au-delà du total
+});
+
+test('QR code : lien d’invitation et lecture du code', () => {
+  const url = joinUrl('https://musicose.netlify.app', '/', 'ose-ab3d');
+  assert.equal(url, 'https://musicose.netlify.app/?join=OSE-AB3D');
+  assert.equal(parseJoinCode(new URL(url).search), 'OSE-AB3D');
+  assert.equal(parseJoinCode('?join=ose-ab3d'), 'OSE-AB3D');
+  assert.equal(parseJoinCode('?join=nimportequoi'), null);   // valeur invalide ignorée
+  assert.equal(parseJoinCode(''), null);
+  assert.equal(parseJoinCode('?screen=grand-ecran&code=OSE-AB3D'), null);   // le lien du grand écran n'est pas un lien joueur
 });
