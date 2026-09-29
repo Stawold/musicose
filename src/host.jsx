@@ -38,6 +38,7 @@ export default function Host() {
   const [finalSent, setFinalSent] = useState(false);
   const [geConnections, setGeConnections] = useState([]);
   const [roundOptions, setRoundOptions] = useState(null); // manche 1 : { options, correctIndex }
+  const [announcedRound, setAnnouncedRound] = useState(null); // manche annoncée sur le grand écran
   const [audioCut, setAudioCut] = useState(false);        // manche 4 : musique coupée après 30 s
 
   const bonusOrderRef = useRef({});
@@ -61,6 +62,7 @@ export default function Host() {
   const songPayloadRef = useRef({});      // infos à renvoyer aux joueurs qui (re)joignent en cours de chanson
   const connBySessionRef = useRef({});
   const geConnectionsRef = useRef([]);
+  const fastestListRef = useRef([]);      // manche 3 : les 3 plus rapides { pseudo, bonus, time }
 
   useEffect(() => { playlistRef.current = playlist; }, [playlist]);
   useEffect(() => { currentSongIndexRef.current = currentSongIndex; }, [currentSongIndex]);
@@ -76,7 +78,7 @@ export default function Host() {
   // Broadcast lobby state (code + player list) to grand écran(s)
   useEffect(() => {
     if (geConnections.length === 0) return;
-    const playerList = Object.values(players).map(p => ({ pseudo: p.pseudo, totalScore: p.totalScore || 0 }));
+    const playerList = Object.values(players).map(p => ({ pseudo: p.pseudo, totalScore: p.totalScore || 0, alive: p.activeRound4 !== false }));
     geConnections.forEach(conn => {
       try { conn.send({ type: "lobbyState", shortCode: shortCodeRef.current, players: playerList }); } catch (e) { /* ignore */ }
     });
@@ -394,6 +396,14 @@ export default function Host() {
                 bonusOrderRef.current[idx] = [...bonusOrder, sessionId];
                 round3BonusAmount = round3BonusForPosition(bonusOrder.length);
                 points += round3BonusAmount;
+                if (round3BonusAmount > 0) {
+                  fastestListRef.current = [...fastestListRef.current, {
+                    pseudo: playersRef.current[sessionId]?.pseudo || resp.pseudo || '?', bonus: round3BonusAmount, time: responseTime,
+                  }];
+                  geConnectionsRef.current.forEach(c => {
+                    try { c.send({ type: "fastestUpdate", list: fastestListRef.current }); } catch (e) { /* ignore */ }
+                  });
+                }
               }
 
               // Manche 4 : aucune bonne réponse → éliminé
@@ -460,6 +470,7 @@ export default function Host() {
     finalizedRef.current = -1;
     acceptUntilRef.current = 0;
     songPayloadRef.current = {};
+    fastestListRef.current = [];
     setAudioCut(false);
     setResponses([]);
     setFastest(null);
@@ -565,6 +576,14 @@ export default function Host() {
     setRevealed(true);
   };
 
+  // Écran de transition sur le grand écran (optionnel) : numéro, nom, règle, durée et points de la manche
+  const announceRound = () => {
+    geConnections.forEach(c => {
+      try { c.send({ type: "announceRound", round: currentRound }); } catch (e) { /* ignore */ }
+    });
+    setAnnouncedRound(currentRound);
+  };
+
   const togglePause = () => {
     if (!audioRef.current) return;
     if (isAudioPlaying) {
@@ -579,6 +598,7 @@ export default function Host() {
   const lastSongIndex = playlist && playlist.songs ? Math.min(playlist.songs.length - 1, ROUND_CONFIG[4].end) : 0;
 
   const goToSong = (newSongIndex) => {
+    setAnnouncedRound(null);
     setCurrentRound(roundForIndex(newSongIndex));
     setCurrentSongIndex(newSongIndex);
     resetSongState();
@@ -912,6 +932,18 @@ export default function Host() {
             )}
             <Btn variant="ghost" onClick={nextSong} style={{ width: 48, height: 48, padding: 0, borderRadius: 999, flexShrink: 0 }}>▶▶</Btn>
           </div>
+
+          {/* Annonce de la manche — proposée avant la 1re chanson de chaque manche */}
+          {currentSongIndex === ROUND_CONFIG[currentRound].start && !isCounting && (
+            <Btn
+              variant={announcedRound === currentRound ? 'ghost' : 'cyan'}
+              onClick={announceRound}
+              disabled={geConnections.length === 0}
+              style={{ width: '100%' }}
+            >
+              {announcedRound === currentRound ? `✓ MANCHE ${currentRound} ANNONCÉE (RÉ-AFFICHER)` : `📣 ANNONCER LA MANCHE ${currentRound}`}
+            </Btn>
+          )}
 
           {/* Reveal */}
           <Btn

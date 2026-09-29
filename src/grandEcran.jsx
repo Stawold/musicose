@@ -5,6 +5,7 @@ import { peerConfig } from "./peerConfig";
 import { MIC_CHOICES, isGameCode, peerIdFromCode } from "./gameLogic";
 import MicIcon from "./components/MicIcon";
 import useWakeLock from "./useWakeLock";
+import { ScreenRound, ScreenTransition } from "./components/RoundScreens";
 import "./styles/tokens.css";
 
 const AVATAR_COLORS = [
@@ -34,6 +35,7 @@ export default function GrandEcran() {
   const [options, setOptions] = useState(null);   // manche 1 : 4 propositions
   const [theme, setTheme] = useState("");         // manche 2
   const [audioSeconds, setAudioSeconds] = useState(null); // manche 4
+  const [fastestList, setFastestList] = useState([]);       // manche 3 : { pseudo, bonus, time }
 
   const stageRef = useRef(null);
 
@@ -82,8 +84,16 @@ export default function GrandEcran() {
             if (data.shortCode) setShortCode(data.shortCode);
             setPlayers(data.players || []);
             break;
+          case "announceRound":
+            setPhase("transition");
+            if (typeof data.round === "number") setCurrentRound(data.round);
+            break;
+          case "fastestUpdate":
+            setFastestList(data.list || []);
+            break;
           case "startTimer":
             setPhase("playing");
+            setFastestList([]);
             setRevealInfo(null);
             if (typeof data.round === "number") setCurrentRound(data.round);
             if (data.roundName) setRoundName(data.roundName);
@@ -160,8 +170,8 @@ export default function GrandEcran() {
           <Stars />
           {(phase === 'lobby' || phase === 'standings' || phase === 'podium') && <GridFloor />}
 
-          {/* Top status bar */}
-          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 64, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 44px', zIndex: 5 }}>
+          {/* Top status bar (les écrans de manche ont leur propre bandeau) */}
+          {phase !== 'playing' && phase !== 'transition' && <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 64, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 44px', zIndex: 5 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
               <span style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 18, letterSpacing: '0.3em', color: 'var(--mo-ink-dim)' }}>GRAND ÉCRAN</span>
             </div>
@@ -170,33 +180,23 @@ export default function GrandEcran() {
                 {shortCode} · {players.length} JOUEUR·SES
               </span>
             )}
-          </div>
+          </div>}
 
           <div style={{ position: 'absolute', inset: 0 }}>
             {phase === 'lobby' && <ScreenLobby shortCode={shortCode} players={players} />}
-            {phase === 'playing' && currentRound === 1 && options && (
-              <ScreenQuiz
-                options={options}
+            {phase === 'transition' && <ScreenTransition round={currentRound} />}
+            {phase === 'playing' && (
+              <ScreenRound
+                round={currentRound}
                 remaining={secondsLeft}
-                total={totalSeconds}
-                roundName={roundName}
-                currentRound={currentRound}
+                answers={answers}
+                players={players}
                 songNumber={songNumber}
                 totalInRound={totalInRound}
-                answers={answers}
-              />
-            )}
-            {phase === 'playing' && !(currentRound === 1 && options) && (
-              <ScreenPlaying
+                options={options}
                 theme={theme}
                 musicCut={audioSeconds !== null && currentRound === 4 && totalSeconds - secondsLeft >= audioSeconds}
-                remaining={secondsLeft}
-                total={totalSeconds}
-                roundName={roundName}
-                currentRound={currentRound}
-                songNumber={songNumber}
-                totalInRound={totalInRound}
-                answers={answers}
+                fastestList={fastestList}
               />
             )}
             {phase === 'reveal' && <ScreenReveal info={revealInfo} />}
@@ -271,136 +271,6 @@ function ScreenLobby({ shortCode, players }) {
           <span style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 22, letterSpacing: '0.3em', color: 'var(--mo-ink-dim)' }}>
             ⟡ EN ATTENTE DU LANCEMENT PAR L'HÔTE ⟡
           </span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* =====================================================================
-   ÉTAT 2 — MANCHE EN COURS
-   ===================================================================== */
-function ScreenPlaying({ remaining, total, roundName, currentRound, songNumber, totalInRound, answers, theme, musicCut }) {
-  const frac = total > 0 ? Math.max(0, Math.min(1, remaining / total)) : 0;
-  const R = 300, C = 2 * Math.PI * R;
-  const ringColor = frac > 0.5 ? 'var(--mo-cyan)' : frac > 0.2 ? 'var(--mo-magenta)' : 'var(--mo-gold)';
-  const low = frac <= 0.2 && remaining > 0;
-
-  return (
-    <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-      {/* Top — round */}
-      <div style={{ position: 'absolute', top: 70, left: 0, right: 0, textAlign: 'center' }}>
-        <Chip live style={{ fontSize: 22, padding: '12px 26px', letterSpacing: '0.2em' }}>
-          MANCHE {currentRound} · {(roundName || '').toUpperCase()}
-        </Chip>
-        <div className="mo-display" style={{ fontSize: 40, color: 'var(--mo-ink)', marginTop: 22, letterSpacing: '0.05em' }}>
-          CHANSON <span style={{ color: 'var(--mo-cyan)' }}>{String(songNumber).padStart(2, '0')}</span> <span style={{ color: 'var(--mo-ink-dim)' }}>/ {totalInRound}</span>
-        </div>
-      </div>
-
-      {/* Manche 2 — thème */}
-      {theme && (
-        <div style={{ position: 'absolute', top: 210, left: 0, right: 0, textAlign: 'center' }}>
-          <span style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 24, letterSpacing: '0.4em', color: 'var(--mo-gold)' }}>THÈME · </span>
-          <span className="mo-display mo-neon" style={{ fontSize: 60, color: 'var(--mo-gold)' }}>{theme.toUpperCase()}</span>
-        </div>
-      )}
-
-      {/* Center — countdown ring + mystery disc */}
-      <div style={{ position: 'relative', width: 720, height: 720, display: 'flex', alignItems: 'center', justifyContent: 'center', transform: theme ? 'scale(0.72) translateY(40px)' : 'none' }}>
-        <svg width="720" height="720" viewBox="0 0 720 720" style={{ position: 'absolute', inset: 0, transform: 'rotate(-90deg)' }}>
-          <circle cx="360" cy="360" r={R} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="20" />
-          <circle cx="360" cy="360" r={R} fill="none" stroke={ringColor} strokeWidth="20" strokeLinecap="round"
-            strokeDasharray={C} strokeDashoffset={C * (1 - frac)}
-            style={{ filter: `drop-shadow(0 0 14px ${ringColor})`, transition: 'stroke-dashoffset 1s linear, stroke 0.4s ease' }} />
-        </svg>
-
-        <div style={{ position: 'relative', width: 460, height: 460 }}>
-          <Vinyl size={460} labelColor="var(--mo-violet)" />
-          <div className="mo-display mo-neon" style={{
-            position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 230, color: low ? 'var(--mo-gold)' : 'var(--mo-ink)', lineHeight: 1,
-            animation: low ? 'mo-pulse 0.5s ease-in-out infinite' : 'none',
-            textShadow: '0 0 30px rgba(7,2,26,0.9), 0 0 60px rgba(7,2,26,0.9)',
-          }}>
-            {Math.ceil(remaining)}
-          </div>
-        </div>
-      </div>
-
-      {/* Bottom — listening + answers */}
-      <div style={{ position: 'absolute', bottom: 80, left: 0, right: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 26 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 22 }}>
-          <div style={{ transform: 'scale(1.6)' }}><Eq count={9} /></div>
-          <div className="mo-display mo-neon" style={{ fontSize: 56, color: 'var(--mo-magenta)' }}>{musicCut ? 'MUSIQUE COUPÉE · À VOUS !' : 'ÇA JOUE…'}</div>
-          <div style={{ transform: 'scale(1.6)' }}><Eq count={9} /></div>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <div style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 26, color: 'var(--mo-ink-dim)', letterSpacing: '0.15em' }}>RÉPONSES REÇUES</div>
-          <div className="mo-display mo-neon" style={{ fontSize: 46, color: 'var(--mo-cyan)' }}>{answers.count}</div>
-          <div style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 26, color: 'var(--mo-ink-dim)' }}>/ {answers.total}</div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* =====================================================================
-   ÉTAT 2 bis — MANCHE 1 : 4 MICROS À CHOISIR
-   ===================================================================== */
-function ScreenQuiz({ options, remaining, total, roundName, currentRound, songNumber, totalInRound, answers }) {
-  const frac = total > 0 ? Math.max(0, Math.min(1, remaining / total)) : 0;
-  const barColor = frac > 0.5 ? 'var(--mo-cyan)' : frac > 0.2 ? 'var(--mo-magenta)' : 'var(--mo-gold)';
-  return (
-    <div style={{ position: 'absolute', inset: 0 }}>
-      <div style={{ position: 'absolute', top: 70, left: 0, right: 0, textAlign: 'center' }}>
-        <Chip live style={{ fontSize: 22, padding: '12px 26px', letterSpacing: '0.2em' }}>
-          MANCHE {currentRound} · {(roundName || '').toUpperCase()}
-        </Chip>
-        <div className="mo-display" style={{ fontSize: 40, color: 'var(--mo-ink)', marginTop: 22, letterSpacing: '0.05em' }}>
-          CHANSON <span style={{ color: 'var(--mo-cyan)' }}>{String(songNumber).padStart(2, '0')}</span> <span style={{ color: 'var(--mo-ink-dim)' }}>/ {totalInRound}</span>
-        </div>
-      </div>
-
-      {/* 4 propositions */}
-      <div style={{
-        position: 'absolute', top: 230, left: 110, right: 110, height: 560,
-        display: 'grid', gridTemplateColumns: '1fr 1fr', gridTemplateRows: '1fr 1fr', gap: 28,
-      }}>
-        {options.map((o, i) => {
-          const m = MIC_CHOICES[i];
-          return (
-            <div key={i} style={{
-              display: 'flex', alignItems: 'center', gap: 28, padding: '0 34px', borderRadius: 26,
-              border: `3px solid ${m.color}`, background: 'rgba(20,6,52,0.65)',
-              boxShadow: `0 0 26px ${m.color}55, inset 0 0 26px ${m.color}22`,
-            }}>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: '0 0 auto' }}>
-                <MicIcon color={m.color} size={120} />
-                <span className="mo-display" style={{ fontSize: 40, color: m.color, marginTop: 4 }}>{m.letter}</span>
-              </div>
-              <div style={{ minWidth: 0 }}>
-                <div className="mo-display" style={{ fontSize: 46, color: 'var(--mo-ink)', lineHeight: 1.05, wordBreak: 'break-word' }}>{o.title}</div>
-                <div style={{ fontFamily: 'var(--mo-font-display)', fontSize: 32, color: m.color, marginTop: 10 }}>{o.artist}</div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Compte à rebours + réponses */}
-      <div style={{ position: 'absolute', left: 110, right: 110, bottom: 60, display: 'flex', alignItems: 'center', gap: 36 }}>
-        <div className="mo-display mo-neon" style={{ fontSize: 110, color: barColor, minWidth: 170, textAlign: 'center', lineHeight: 1 }}>{Math.ceil(remaining)}</div>
-        <div style={{ flex: 1 }}>
-          <div style={{ height: 22, borderRadius: 99, background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
-            <div style={{ width: `${frac * 100}%`, height: '100%', background: barColor, boxShadow: `0 0 16px ${barColor}`, transition: 'width 1s linear, background 0.4s ease' }} />
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 18 }}>
-            <div style={{ transform: 'scale(1.4)' }}><Eq count={9} /></div>
-            <div style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 26, color: 'var(--mo-ink-dim)', letterSpacing: '0.15em', marginLeft: 12 }}>RÉPONSES REÇUES</div>
-            <div className="mo-display mo-neon" style={{ fontSize: 46, color: 'var(--mo-cyan)' }}>{answers.count}</div>
-            <div style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 26, color: 'var(--mo-ink-dim)' }}>/ {answers.total}</div>
-          </div>
         </div>
       </div>
     </div>

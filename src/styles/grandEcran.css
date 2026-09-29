@@ -1,0 +1,12 @@
+/* Polices intégrées (aucun service externe) */
+@import "@fontsource/tektur/latin-500.css";
+@import "@fontsource/tektur/latin-800.css";
+@import "@fontsource/dm-mono/latin-400.css";
+@import "@fontsource/dm-mono/latin-500.css";
+
+@keyframes ge-eq { 0%, 100% { transform: scaleY(.3); } 50% { transform: scaleY(1); } }
+.ge-bar > div { animation: ge-eq var(--dur, 1s) ease-in-out var(--delay, 0s) infinite; }
+.ge-bar--dead > div { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  .ge-bar > div { animation: none; }
+}

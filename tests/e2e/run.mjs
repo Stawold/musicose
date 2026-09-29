@@ -137,6 +137,11 @@ try {
 
   // ═══ MANCHE 1 — 4 micros ═══════════════════════════════════
   console.log('\nManche 1 — Chansons en rafale (4 propositions)');
+  await clickHost(/ANNONCER LA MANCHE 1/); await sleep(400);
+  const trText = (await ge.locator('body').innerText()).replace(/\s+/g, ' ');
+  check('transition : manche 1 annoncée (numéro, nom, règle, durée, points)',
+    /01/.test(trText) && /CHANSONS/.test(trText) && /EN RAFALE/.test(trText) && /Choisis le bon micro/.test(trText) && /30 S/.test(trText) && /1 PT \+ BONUS \+1/.test(trText), trText.slice(0, 250));
+  await shot(ge, 'ge-transition1');
   await start();
   await shot(ge, 'ge-manche1'); await shot(alice, 'tel-manche1');
   const micCount = await alice.getByRole('button', { name: /^Proposition / }).count();
@@ -158,7 +163,7 @@ try {
   await cleo.getByRole('button', { name: `Proposition ${good}` }).click();    // Cleo juste mais plus lente
   await bob.getByRole('button', { name: `Proposition ${wrong}` }).click();
   await sleep(300);
-  check('grand écran : compteur de réponses', /RÉPONSES REÇUES\s*3\s*\/\s*3/.test((await ge.locator('body').innerText()).replace(/\n/g, ' ')));
+  check('grand écran : compteur de réponses', /3\/3 RÉPONSES/.test((await ge.locator('body').innerText()).replace(/\s+/g, ' ')));
   await reveal();
   await shot(ge, 'ge-reveal1');
   let s = await scores();
@@ -209,6 +214,9 @@ try {
 
   // ═══ MANCHE 2 — Le Focus ═══════════════════════════════════
   console.log('\nManche 2 — Le Focus (thème, titre seul)');
+  await clickHost(/ANNONCER LA MANCHE 2/); await sleep(300);
+  await shot(ge, 'ge-transition2');
+  check('transition : manche 2 annoncée', /LE\s+FOCUS/.test(await ge.locator('body').innerText()) && /Trouve le titre/.test(await ge.locator('body').innerText()));
   await start();
   await shot(ge, 'ge-manche2'); await shot(alice, 'tel-manche2');
   const aliceText = await alice.locator('body').innerText();
@@ -236,6 +244,10 @@ try {
   await answer(bob, 'Titre 31', 'inconnu');          // titre seul → 1
   const d3 = await delta(b2);
   check('manche 3 : 6 / 5 / 1 pts (bonus 3-2-1 par ordre d’arrivée)', same(d3, { a: 6, b: 1, c: 5 }), JSON.stringify(d3));
+  await sleep(300);
+  const geR3 = (await ge.locator('body').innerText()).replace(/\s+/g, ' ');
+  check('grand écran manche 3 : podium des plus rapides (Alice +3, Cleo +2)', /LES \+ RAPIDES/.test(geR3) && /\+3 Alice/.test(geR3) && /\+2 Cleo/.test(geR3), geR3.slice(0, 300));
+  await shot(ge, 'ge-manche3');
   await reveal();
 
   // ═══ MANCHE 4 — Battle Royal ═══════════════════════════════
@@ -250,6 +262,9 @@ try {
   await answer(bob, 'zzz', 'yyy');            // rien → éliminé
   const d4 = await delta(b2);
   check('manche 4 : 5 pts (les deux), 2 pts (un seul), 0 = éliminé', same(d4, { a: 5, b: 0, c: 2 }), JSON.stringify(d4));
+  await sleep(300);
+  check('grand écran manche 4 : 2 joueurs en lice sur 3', /2 \/ 3 EN LICE/.test((await ge.locator('body').innerText()).replace(/\s+/g, ' ')), (await ge.locator('body').innerText()).replace(/\s+/g, ' ').slice(0, 300));
+  await shot(ge, 'ge-manche4');
   await reveal();
   await next();
   await start();
