@@ -206,6 +206,8 @@ export default function GrandEcran() {
                 code={shortCode}
                 round={currentRound}
                 remaining={secondsLeft}
+                total={totalSeconds}
+                songIndex={songIndex}
                 answers={answers}
                 players={players}
                 progress={progress}

@@ -1,6 +1,6 @@
 import React from "react";
 import { PHONE_THEMES, BASE_THEME, PILL_COLORS, RESULT_COLORS, rnd } from "../roundThemes";
-import { ROUND_NAMES, ROUND_CONFIG, MIC_CHOICES } from "../gameLogic";
+import { ROUND_NAMES, ROUND_CONFIG, MIC_CHOICES, PLAYER_COLORS } from "../gameLogic";
 import "../styles/grandEcran.css";
 
 // Écrans téléphone — maquettes « Scène synthwave » (Claude Design).
@@ -15,11 +15,13 @@ const skew = { transform: 'skewX(-8deg)' };
 
 export const phoneTheme = (round) => PHONE_THEMES[round] || PHONE_THEMES[3];
 
-function Shell({ t, children }) {
+function Shell({ t, children, scroll, name }) {
+  // Tous les écrans tiennent dans la fenêtre, sans défilement. Seul le podium final peut défiler.
   return (
-    <div style={{
-      minHeight: '100vh', display: 'flex', flexDirection: 'column', background: t.bg, color: t.fg,
-      fontFamily: MONO, position: 'relative', overflow: 'hidden',
+    <div data-screen={name} style={{
+      ...(scroll ? { minHeight: '100vh' } : { height: '100dvh', maxHeight: '100vh' }),
+      display: 'flex', flexDirection: 'column', background: t.bg, color: t.fg,
+      fontFamily: MONO, position: 'relative', overflow: scroll ? 'hidden auto' : 'hidden',
     }}>{children}</div>
   );
 }
@@ -61,7 +63,7 @@ function Eq({ n, colors, color, base = 1.2, seed = 0, height = 22 }) {
 /* Mini-scène : soleil rayé + grille */
 function Scene({ t, height, sunSize, sunTop, sunGradient, sunOp = 1, gridTop, gridColor, children }) {
   return (
-    <div style={{ position: 'relative', height, overflow: 'hidden', flex: '0 0 auto' }}>
+    <div style={{ position: 'relative', height, overflow: 'hidden', flex: '0 1 auto', minHeight: 0 }}>
       <div style={{
         position: 'absolute', left: '50%', top: sunTop, width: sunSize, height: sunSize, marginLeft: -sunSize / 2, borderRadius: '50%',
         background: sunGradient || `linear-gradient(${t.a},${t.b})`, opacity: sunOp, WebkitMask: SUN_MASK, mask: SUN_MASK,
@@ -102,12 +104,16 @@ const fieldInput = (color, fg) => ({
 function PlayerGrid({ players }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-      {players.slice(0, 30).map((p, i) => (
-        <div key={p + i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: 'rgba(255,255,255,.05)', minWidth: 0 }}>
-          <span style={{ width: 28, height: 28, flex: '0 0 auto', background: BASE_THEME.bars[i % 4], color: BASE.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', font: `800 12px ${TEKTUR}` }}>{(p || '?').slice(0, 2).toUpperCase()}</span>
-          <span style={{ font: `700 15px ${TEKTUR}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p}</span>
-        </div>
-      ))}
+      {players.slice(0, 30).map((pl, i) => {
+        const name = typeof pl === 'string' ? pl : pl.pseudo;
+        const col = (typeof pl === 'object' && pl.color) || BASE_THEME.bars[i % 4];
+        return (
+          <div key={name + i} data-player={name} data-color={col} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: 'rgba(255,255,255,.05)', minWidth: 0 }}>
+            <span style={{ width: 28, height: 28, flex: '0 0 auto', background: col, color: BASE.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', font: `800 12px ${TEKTUR}` }}>{(name || '?').slice(0, 2).toUpperCase()}</span>
+            <span style={{ font: `700 15px ${TEKTUR}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -123,34 +129,51 @@ const RoundPillsRow = ({ current }) => (
   </div>
 );
 
-/* ── Connexion ─────────────────────────────────────────────── */
-export function ScreenJoin({ code, onCode, pseudo, onPseudo, onSubmit, connecting, error, hasSession, onReset, onResetMode }) {
+/* ── Connexion : tient sur une seule page (code, pseudo, couleur) ───────── */
+export function ScreenJoin({ code, onCode, pseudo, onPseudo, color, onColor, onSubmit, connecting, error, hasSession, onReset, onResetMode }) {
   const t = BASE;
+  const input = (c) => ({ ...fieldInput(c, t.fg), height: 50, font: `700 20px ${TEKTUR}` });
   return (
-    <Shell t={t}>
+    <Shell t={t} name="join">
       <Header t={t} right="BLIND TEST LIVE" />
-      <Scene t={t} height={300} sunSize={210} sunTop={40} sunGradient={BASE_THEME.sun} gridTop={200} gridColor="rgba(244,235,217,.25)">
-        <Title t={t}>REJOINS<br />LA PARTIE</Title>
-        <div style={{ position: 'absolute', left: 20, right: 20, bottom: 16 }}><Eq n={16} colors={BASE_THEME.bars} base={1.2} seed={77} height={24} /></div>
-      </Scene>
-      <div style={{ padding: '22px 20px', display: 'flex', flexDirection: 'column', gap: 14, flex: 1 }}>
+      <div style={{ position: 'relative', height: 'clamp(92px, 19dvh, 170px)', overflow: 'hidden', flex: '0 1 auto' }}>
+        <div style={{
+          position: 'absolute', left: '50%', top: 8, width: 'clamp(70px, 15dvh, 130px)', height: 'clamp(70px, 15dvh, 130px)', transform: 'translateX(-50%)',
+          borderRadius: '50%', background: BASE_THEME.sun, WebkitMask: SUN_MASK, mask: SUN_MASK,
+        }} />
+        <div style={{ position: 'absolute', left: -150, right: -150, top: '48%', height: 200, transform: 'perspective(260px) rotateX(60deg)', transformOrigin: 'top', background: GRID_H('rgba(244,235,217,.25)', 50, 36) }} />
+        <div style={{ position: 'absolute', left: 20, right: 20, bottom: 8, font: `italic 800 clamp(22px, 4.2dvh, 36px)/.9 ${TEKTUR}`, whiteSpace: 'nowrap', color: t.fg, textShadow: `3px 3px 0 ${t.a}` }}>REJOINS LA PARTIE</div>
+      </div>
+      <div style={{ padding: '10px 20px 8px', display: 'flex', flexDirection: 'column', gap: 10, flex: '1 1 auto', minHeight: 0 }}>
         {hasSession && (
-          <div style={{ font: `500 11px ${MONO}`, letterSpacing: '.15em', color: '#00E5FF' }}>SESSION SAUVEGARDÉE — TU RETROUVERAS TES POINTS</div>
+          <div style={{ font: `500 10px ${MONO}`, letterSpacing: '.12em', color: '#00E5FF' }}>SESSION SAUVEGARDÉE — TU RETROUVERAS TES POINTS</div>
         )}
         <label style={fieldLabel('#FFC933')}>CODE DE LA PARTIE
           <input value={code} onChange={e => onCode(e.target.value)} onKeyPress={e => e.key === 'Enter' && onSubmit()}
             placeholder="OSE-XXXX" autoComplete="off" autoCorrect="off" autoCapitalize="characters" spellCheck="false"
-            style={{ ...fieldInput('#FFC933', t.fg), letterSpacing: '.1em' }} />
+            style={{ ...input('#FFC933'), letterSpacing: '.1em' }} />
         </label>
         <label style={fieldLabel('#00E5FF')}>TON PSEUDO
           <input value={pseudo} onChange={e => onPseudo(e.target.value)} onKeyPress={e => e.key === 'Enter' && onSubmit()}
             placeholder="Ton pseudo" autoComplete="off" autoCorrect="off" autoCapitalize="none" spellCheck="false"
-            style={fieldInput('#00E5FF', t.fg)} />
+            style={input('#00E5FF')} />
         </label>
+        <div>
+          <div style={{ font: `500 12px ${MONO}`, letterSpacing: '.2em', color: color, marginBottom: 6 }}>TA COULEUR</div>
+          <div role="radiogroup" aria-label="Ta couleur" style={{ display: 'flex', gap: 8 }}>
+            {PLAYER_COLORS.map(c => (
+              <button key={c} type="button" role="radio" aria-checked={color === c} aria-label={`Couleur ${c}`} data-color={c} onClick={() => onColor(c)}
+                style={{
+                  flex: 1, height: 34, border: 0, background: c, cursor: 'pointer', ...skew,
+                  boxShadow: color === c ? `0 0 0 3px ${t.bg}, 0 0 0 5px ${t.fg}` : 'none', opacity: color === c ? 1 : 0.75,
+                }} />
+            ))}
+          </div>
+        </div>
         {error && (
-          <div style={{ padding: '10px 14px', border: '1px solid rgba(255,45,149,.5)', background: 'rgba(255,45,149,.08)', color: t.a, font: `500 12px/1.4 ${MONO}` }}>{error}</div>
+          <div style={{ padding: '8px 12px', border: '1px solid rgba(255,45,149,.5)', background: 'rgba(255,45,149,.08)', color: t.a, font: `500 12px/1.4 ${MONO}` }}>{error}</div>
         )}
-        <SkewBtn bg={t.a} color="#fff" onClick={onSubmit} disabled={connecting} style={{ marginTop: 'auto' }}>
+        <SkewBtn bg={t.a} color="#fff" onClick={onSubmit} disabled={connecting} style={{ marginTop: 'auto', height: 56 }}>
           {connecting ? 'CONNEXION…' : 'ENTRER EN SCÈNE ›››'}
         </SkewBtn>
         <div style={{ display: 'flex', justifyContent: 'center', gap: 20 }}>
@@ -171,9 +194,9 @@ export function ScreenJoin({ code, onCode, pseudo, onPseudo, onSubmit, connectin
 export function ScreenWaiting({ pseudo, score, players, code, round, title = ['EN', 'ATTENTE'], message, restored }) {
   const t = BASE;
   return (
-    <Shell t={t}>
+    <Shell t={t} name="waiting">
       <Header t={t} right={who(t, pseudo, score)} />
-      <Scene t={t} height={300} sunSize={210} sunTop={40} sunGradient={BASE_THEME.sun} gridTop={200} gridColor="rgba(244,235,217,.25)">
+      <Scene t={t} height="clamp(200px, 32dvh, 300px)" sunSize={210} sunTop={40} sunGradient={BASE_THEME.sun} gridTop={200} gridColor="rgba(244,235,217,.25)">
         <Title t={t}>{title[0]}<br />{title[1]}</Title>
         <div style={{ position: 'absolute', left: 20, right: 20, bottom: 16 }}><Eq n={16} colors={BASE_THEME.bars} base={1.2} seed={77} height={24} /></div>
       </Scene>
@@ -186,8 +209,11 @@ export function ScreenWaiting({ pseudo, score, players, code, round, title = ['E
           <span style={{ font: `500 12px ${MONO}`, letterSpacing: '.2em' }}>JOUEURS CONNECTÉS</span>
           <span style={{ font: `italic 800 28px ${TEKTUR}`, color: '#00E5FF' }}>{players.length}</span>
         </div>
-        <PlayerGrid players={players} />
-        <div style={{ marginTop: 'auto' }}><RoundPillsRow current={round} /></div>
+        <div style={{ flex: '1 1 auto', minHeight: 0, overflow: 'hidden' }}>
+          <PlayerGrid players={players.slice(0, 10)} />
+          {players.length > 10 && <div style={{ font: `500 12px ${MONO}`, letterSpacing: '.15em', color: '#00E5FF', marginTop: 8 }}>+ {players.length - 10} AUTRES JOUEURS</div>}
+        </div>
+        <RoundPillsRow current={round} />
       </div>
       <Footer t={t} left={`CODE · ${(code || '').toUpperCase()}`} right="● LIVE" rightColor="#00E5FF" />
     </Shell>
@@ -206,9 +232,9 @@ export function ScreenGame({
   const pts = { 1: '1 PT + BONUS', 2: 'TITRE SEUL · 2 PTS', 3: '3 PTS + BONUS', 4: '5 / 2 PTS · ÉLIMINATION' }[round];
   const locked = !active || eliminated;
   return (
-    <Shell t={t}>
+    <Shell t={t} name="game">
       <Header t={t} right={who(t, pseudo, score)} />
-      <Scene t={t} height={270} sunSize={190} sunTop={26} sunOp={t.sunOp} gridTop={170}>
+      <Scene t={t} height="clamp(190px, 31dvh, 270px)" sunSize={190} sunTop={26} sunOp={t.sunOp} gridTop={170}>
         <div style={{ position: 'absolute', left: 20, top: 18, font: `500 12px ${MONO}`, letterSpacing: '.2em' }}>MANCHE {pad2(round)}</div>
         <div data-seconds={active ? seconds : ''} style={{ position: 'absolute', right: 20, top: 10, font: `italic 800 56px/1 ${TEKTUR}`, color: t.b, textShadow: `3px 3px 0 ${t.a}` }}>{active ? seconds : '—'}</div>
         <div style={{ position: 'absolute', left: 20, right: 20, bottom: 44, font: `italic 800 30px/.95 ${TEKTUR}`, textShadow: `3px 3px 0 ${t.a}` }}>{ROUND_NAMES[round - 1].toUpperCase()}</div>
@@ -224,7 +250,7 @@ export function ScreenGame({
         {musicCut && <div style={{ font: `500 13px ${MONO}`, letterSpacing: '.15em', color: t.a }}>MUSIQUE COUPÉE</div>}
 
         {isQuiz ? (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gridAutoRows: '140px', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gridAutoRows: 'clamp(96px, 16dvh, 140px)', gap: 12 }}>
             {MIC_CHOICES.slice(0, optionCount).map((m, i) => {
               const selected = choice === i;
               return (
@@ -272,9 +298,9 @@ export function ScreenSent({ round, pseudo, score, answer, choiceIndex }) {
   const t = phoneTheme(round);
   const mic = choiceIndex !== null && choiceIndex !== undefined ? MIC_CHOICES[choiceIndex] : null;
   return (
-    <Shell t={t}>
+    <Shell t={t} name="sent">
       <Header t={t} right={who(t, pseudo, score)} />
-      <Scene t={t} height={270} sunSize={190} sunTop={26} sunOp={t.sunOp} gridTop={170}>
+      <Scene t={t} height="clamp(190px, 31dvh, 270px)" sunSize={190} sunTop={26} sunOp={t.sunOp} gridTop={170}>
         <div style={{ position: 'absolute', left: 20, top: 18, font: `500 12px ${MONO}`, letterSpacing: '.2em' }}>MANCHE {pad2(round)}</div>
         <Title t={t} bottom={44} size={38}>RÉPONSE<br />ENVOYÉE</Title>
         <div style={{ position: 'absolute', left: 20, right: 20, bottom: 14 }}><Eq n={t.eqN} color={t.b} base={t.spd} seed={round * 20} /></div>
@@ -305,82 +331,151 @@ export function ScreenSent({ round, pseudo, score, answer, choiceIndex }) {
   );
 }
 
-/* ── Classement (liste + ma position) ──────────────────────── */
-function Leaderboard({ t, ranking, pseudo }) {
-  const rows = (ranking || []).map((r, i) => ({ ...r, rank: i + 1 }));
-  const top = rows.slice(0, 3);
-  const me = rows.find(r => r.pseudo === pseudo);
-  const shown = me && me.rank > 3 ? [...top, me] : top;
-  return (
-    <>
-      <span style={{ font: `italic 800 34px ${TEKTUR}`, textShadow: `3px 3px 0 ${t.a}`, marginTop: 14 }}>CLASSEMENT</span>
-      {shown.map((r, i) => (
-        <div key={r.pseudo + r.rank} style={{
-          display: 'grid', gridTemplateColumns: '50px 1fr auto', alignItems: 'center', padding: '10px 6px',
-          borderBottom: `1px solid ${t.b}44`, font: `700 18px ${TEKTUR}`,
-          background: r.pseudo === pseudo ? `${t.b}22` : 'transparent', ...(i === 3 ? { borderTop: `1px dashed ${t.b}88` } : {}),
-        }}>
-          <span style={{ font: `italic 800 26px ${TEKTUR}`, color: t.b }}>{r.rank}</span>
-          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.pseudo}</span>
-          <span>{r.score || 0}</span>
-        </div>
-      ))}
-    </>
-  );
-}
-
-/* ── Révélation ────────────────────────────────────────────── */
-export function ScreenReveal({ pseudo, outcome, points, label, sub, correct, mine, bonuses, ranking, onContinue }) {
-  const t = { bg: '#140A3C', fg: '#EAF4FF', a: '#FF2E93', b: '#00E5FF' };
+/* ── Révélation : reste dans la DA de la manche, ni classement ni bouton ──────── */
+export function ScreenReveal({ round, pseudo, score, outcome, points, label, sub, correct, mine, bonuses }) {
+  const t = phoneTheme(round);
   const color = RESULT_COLORS[outcome];
+  const mark = outcome === 'parfait' ? '✓' : outcome === 'partiel' ? '≈' : '✕';
   return (
-    <Shell t={t}>
-      <Header t={t} right="RÉVÉLATION" />
-      <div style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <div data-outcome={outcome} style={{ background: color, color: '#0A0A0D', padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', transform: 'skewX(-6deg)' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-            <span style={{ font: `italic 800 24px ${TEKTUR}` }}>{label}</span>
-            <span style={{ font: `500 12px ${MONO}` }}>{sub}</span>
-          </div>
-          <span style={{ font: `italic 800 48px ${TEKTUR}` }}>{points > 0 ? `+${points}` : '0'}</span>
+    <Shell t={t} name="reveal">
+      <Header t={t} right={who(t, pseudo, score)} />
+      <Scene t={t} height="clamp(190px, 31dvh, 270px)" sunSize={190} sunTop={26} sunOp={t.sunOp} gridTop={170}>
+        <div style={{ position: 'absolute', left: 20, top: 18, font: `500 12px ${MONO}`, letterSpacing: '.2em' }}>MANCHE {pad2(round)}</div>
+        <div data-points style={{ position: 'absolute', right: 20, top: 10, font: `italic 800 56px/1 ${TEKTUR}`, color: t.b, textShadow: `3px 3px 0 ${t.a}` }}>{points > 0 ? `+${points}` : '0'}</div>
+        <div data-outcome={outcome} style={{ position: 'absolute', left: 20, right: 20, bottom: 44, font: `italic 800 30px/.95 ${TEKTUR}`, textShadow: `3px 3px 0 ${t.a}` }}>{label}</div>
+        <div style={{ position: 'absolute', left: 20, right: 20, bottom: 14 }}><Eq n={t.eqN} color={t.b} base={t.spd} seed={round * 20} /></div>
+      </Scene>
+      <div style={{ height: 6, background: color }} />
+
+      <div style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 14, flex: 1 }}>
+        <div style={{ font: `500 13px ${MONO}`, letterSpacing: '.15em', color }}><b style={{ font: `800 18px ${TEKTUR}` }}>{mark}</b> {sub.toUpperCase()}</div>
+        <div style={{ padding: 16, border: `1px solid ${t.b}`, background: 'rgba(255,255,255,.04)' }}>
+          <div style={{ font: `500 11px ${MONO}`, letterSpacing: '.25em', opacity: 0.7 }}>C'ÉTAIT</div>
+          <div style={{ font: `italic 800 24px/1.1 ${TEKTUR}`, marginTop: 8, textShadow: `2px 2px 0 ${t.a}` }}>{(correct.title || '').toUpperCase()}</div>
+          <div style={{ font: `500 14px ${MONO}`, color: t.b, marginTop: 6 }}>{(correct.artist || '').toUpperCase()}</div>
         </div>
+        {mine && (
+          <div style={{ font: `400 12px ${MONO}`, letterSpacing: '.1em', opacity: 0.75 }}>
+            TA RÉPONSE · <span style={{ textDecoration: outcome === 'rate' ? 'line-through' : 'none' }}>{mine}</span>
+          </div>
+        )}
         {bonuses.map(b => (
           <div key={b} style={{ padding: '8px 14px', border: `1px solid ${t.b}`, color: t.b, font: `500 12px ${MONO}`, letterSpacing: '.15em', ...skew }}>{b}</div>
         ))}
-        <div style={{ padding: 14, border: `1px solid ${t.b}66` }}>
-          <div style={{ font: `500 11px ${MONO}`, letterSpacing: '.25em', opacity: 0.7 }}>C'ÉTAIT</div>
-          <div style={{ font: `italic 800 22px/1.1 ${TEKTUR}`, color: t.a, marginTop: 6 }}>{(correct.title || '').toUpperCase()}</div>
-          <div style={{ font: `500 14px ${MONO}`, color: t.b, marginTop: 4 }}>{(correct.artist || '').toUpperCase()}</div>
-          {mine && <div style={{ font: `400 12px ${MONO}`, opacity: 0.65, marginTop: 10, textDecoration: outcome === 'rate' ? 'line-through' : 'none' }}>TA RÉPONSE · {mine}</div>}
-        </div>
-        <Leaderboard t={t} ranking={ranking} pseudo={pseudo} />
-        <SkewBtn bg={t.b} color={t.bg} onClick={onContinue} style={{ height: 58, font: `italic 800 20px ${TEKTUR}`, marginTop: 8 }}>CONTINUER ›››</SkewBtn>
       </div>
+      <Footer t={t} left={`${ROUND_CONFIG[round].seconds} S`} right="EN ATTENTE DE LA SUITE…" />
     </Shell>
   );
 }
 
-/* ── Classement de fin de manche ───────────────────────────── */
-export function ScreenRanking({ pseudo, ranking, onContinue }) {
-  const t = { bg: '#140A3C', fg: '#EAF4FF', a: '#FF2E93', b: '#00E5FF' };
-  const rows = (ranking || []).map((r, i) => ({ ...r, rank: i + 1 })).slice(0, 8);
+const Swatch = ({ color, size = 28, text, bg = '#0E0B1F' }) => (
+  <span style={{ width: size, height: size, flex: '0 0 auto', background: color || '#888', color: bg, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', font: `800 ${Math.round(size * 0.42)}px ${TEKTUR}` }}>{text}</span>
+);
+
+/* ── Classement de fin de manche (dans la DA de la manche, sans bouton) ─────── */
+export function ScreenRanking({ round, pseudo, score, ranking }) {
+  const t = phoneTheme(round);
+  const rows = (ranking || []).map((r, i) => ({ ...r, rank: i + 1 }));
+  const top = rows.slice(0, 6);
+  const me = rows.find(r => r.pseudo === pseudo);
+  const shown = me && me.rank > 6 ? [...top, me] : top;
   return (
-    <Shell t={t}>
-      <Header t={t} right="CLASSEMENT" />
-      <div style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 4, flex: 1 }}>
-        <span style={{ font: `italic 800 40px ${TEKTUR}`, textShadow: `3px 3px 0 ${t.a}`, marginBottom: 10 }}>CLASSEMENT</span>
-        {rows.map(r => (
-          <div key={r.pseudo + r.rank} style={{
-            display: 'grid', gridTemplateColumns: '50px 1fr auto', alignItems: 'center', padding: '10px 6px', borderBottom: `1px solid ${t.b}44`,
-            font: `700 18px ${TEKTUR}`, background: r.pseudo === pseudo ? `${t.b}22` : 'transparent',
+    <Shell t={t} name="ranking">
+      <Header t={t} right={who(t, pseudo, score)} />
+      <Scene t={t} height="clamp(120px, 20dvh, 200px)" sunSize={150} sunTop={14} sunOp={t.sunOp} gridTop={120}>
+        <div style={{ position: 'absolute', left: 20, top: 14, font: `500 12px ${MONO}`, letterSpacing: '.2em' }}>APRÈS LA MANCHE {pad2(round)}</div>
+        <Title t={t} bottom={14} size={40}>CLASSEMENT</Title>
+      </Scene>
+      <div style={{ height: 6, background: `linear-gradient(90deg,${t.a},${t.b})` }} />
+      <div style={{ padding: '14px 20px', display: 'flex', flexDirection: 'column', gap: 2, flex: 1 }}>
+        {shown.map(r => (
+          <div key={r.pseudo + r.rank} data-me={r.pseudo === pseudo ? 'true' : 'false'} style={{
+            display: 'grid', gridTemplateColumns: '40px 1fr auto', alignItems: 'center', gap: 8, padding: '9px 8px', borderBottom: `1px solid ${t.b}44`,
+            font: `700 17px ${TEKTUR}`, background: r.pseudo === pseudo ? `${t.b}26` : 'transparent',
           }}>
-            <span style={{ font: `italic 800 26px ${TEKTUR}`, color: r.rank <= 3 ? '#FFC933' : t.b }}>{r.rank}</span>
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.pseudo}</span>
-            <span>{r.score || 0} pts</span>
+            <span style={{ font: `italic 800 24px ${TEKTUR}`, color: r.rank <= 3 ? t.b : t.fg }}>{r.rank}</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+              <Swatch color={r.color} size={18} bg={t.bg} />
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.pseudo}</span>
+            </span>
+            <span>{r.score || 0}</span>
           </div>
         ))}
-        <SkewBtn bg={t.b} color={t.bg} onClick={onContinue} style={{ height: 58, font: `italic 800 20px ${TEKTUR}`, marginTop: 'auto' }}>CONTINUER ›››</SkewBtn>
       </div>
+      <Footer t={t} left={`MANCHE ${pad2(round)}`} right="EN ATTENTE DE LA SUITE…" />
+    </Shell>
+  );
+}
+
+/* ── Podium final : le défilement n'existe que sur cet écran ─────────────── */
+export function ScreenPodium({ pseudo, ranking, onReplay }) {
+  const t = BASE;
+  const rows = (ranking || []).map((r, i) => ({ ...r, rank: i + 1 }));
+  const me = rows.find(r => r.pseudo === pseudo);
+  const top3 = rows.slice(0, 3);
+  const rest = rows.slice(3);
+  const meRef = React.useRef(null);
+  React.useEffect(() => { if (me && me.rank > 3 && meRef.current) meRef.current.scrollIntoView({ block: 'center', behavior: 'smooth' }); }, [me && me.rank]);
+  const steps = [
+    { p: top3[1], rank: 2, h: 100, bg: t.b, fg: t.bg },
+    { p: top3[0], rank: 1, h: 142, bg: t.a, fg: '#fff' },
+    { p: top3[2], rank: 3, h: 74, bg: t.fg, fg: t.bg },
+  ];
+  return (
+    <Shell t={t} scroll name="podium">
+      <Header t={t} right="FIN DE PARTIE" />
+      <Scene t={t} height={190} sunSize={140} sunTop={12} sunGradient={BASE_THEME.sun} gridTop={110} gridColor="rgba(244,235,217,.25)">
+        <Title t={t} bottom={14} size={46}>PODIUM</Title>
+      </Scene>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, padding: '18px 16px 0' }}>
+        {steps.map(({ p, rank, h, bg, fg }) => (
+          <div key={rank} data-podium-rank={rank} style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'stretch' }}>
+            <div style={{ textAlign: 'center', marginBottom: 6 }}>
+              {p && <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 4 }}><Swatch color={p.color} size={rank === 1 ? 32 : 26} /></div>}
+              <div style={{ font: `800 ${rank === 1 ? 16 : 13}px/1.1 ${TEKTUR}`, wordBreak: 'break-word' }}>{p ? p.pseudo : '—'}</div>
+              <div style={{ font: `500 11px ${MONO}`, color: t.b, marginTop: 2 }}>{p ? `${p.score || 0} PTS` : ''}</div>
+            </div>
+            <div style={{
+              height: h, background: bg, color: fg, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: 6,
+              boxShadow: p && p.pseudo === pseudo ? `0 0 0 3px ${t.bg}, 0 0 0 5px ${t.fg}` : 'none',
+            }}>
+              <span style={{ font: `italic 800 ${rank === 1 ? 54 : 40}px/.9 ${TEKTUR}` }}>{rank}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div data-me-card style={{ margin: '16px 20px 0', padding: '12px 16px', border: `2px solid ${t.b}`, ...skew, background: 'rgba(255,255,255,.05)' }}>
+        <div style={{ font: `500 11px ${MONO}`, letterSpacing: '.2em', color: t.b }}>{me && me.rank <= 3 ? 'BRAVO !' : 'TON CLASSEMENT'}</div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 4 }}>
+          <span style={{ font: `italic 800 34px ${TEKTUR}` }}>{me ? `N°${me.rank}` : '—'} <span style={{ font: `500 12px ${MONO}`, opacity: 0.7 }}>/ {rows.length}</span></span>
+          <span style={{ font: `800 22px ${TEKTUR}`, color: t.b }}>{me ? me.score || 0 : 0} PTS</span>
+        </div>
+      </div>
+
+      {rest.length > 0 && (
+        <div style={{ padding: '14px 20px 6px', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ font: `500 11px ${MONO}`, letterSpacing: '.25em', opacity: 0.7, marginBottom: 6 }}>LES AUTRES JOUEURS</div>
+          {rest.map(r => (
+            <div key={r.pseudo + r.rank} ref={r.pseudo === pseudo ? meRef : undefined} data-me={r.pseudo === pseudo ? 'true' : 'false'} style={{
+              display: 'grid', gridTemplateColumns: '40px 1fr auto', alignItems: 'center', gap: 8, padding: '9px 8px', borderBottom: `1px solid ${t.b}33`,
+              font: `700 16px ${TEKTUR}`, background: r.pseudo === pseudo ? `${t.b}2a` : 'transparent',
+            }}>
+              <span style={{ font: `italic 800 22px ${TEKTUR}`, color: t.b }}>{r.rank}</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                <Swatch color={r.color} size={18} />
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.pseudo}</span>
+              </span>
+              <span>{r.score || 0}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div style={{ padding: '16px 20px 22px', marginTop: 'auto' }}>
+        <SkewBtn bg={t.b} color={t.bg} onClick={onReplay} style={{ width: '100%', height: 58 }}>REJOUER ›››</SkewBtn>
+      </div>
+      <Footer t={t} left="MERCI D'AVOIR JOUÉ" right={`${rows.length} JOUEURS`} />
     </Shell>
   );
 }

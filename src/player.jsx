@@ -5,10 +5,10 @@ import { peerConfig } from "./peerConfig";
 import "./styles/tokens.css";
 
 import {
-  ROUND_NAMES as roundNames, MIC_CHOICES, isCorrect, isArtistCorrect, isGameCode, peerIdFromCode, parseJoinCode,
+  ROUND_NAMES as roundNames, MIC_CHOICES, isCorrect, isArtistCorrect, isGameCode, peerIdFromCode, parseJoinCode, normalizePlayerColor, DEFAULT_PLAYER_COLOR,
 } from "./gameLogic";
 import MicIcon from "./components/MicIcon";
-import { ScreenJoin, ScreenWaiting, ScreenGame, ScreenSent, ScreenReveal, ScreenRanking } from "./components/PhoneScreens";
+import { ScreenJoin, ScreenWaiting, ScreenGame, ScreenSent, ScreenReveal, ScreenRanking, ScreenPodium } from "./components/PhoneScreens";
 import useWakeLock from "./useWakeLock";
 
 const generateSessionId = () => {
@@ -40,7 +40,7 @@ export default function Player({ onResetMode }) {
   const [pseudoInput, setPseudoInput] = useState("");
   const [codeInput, setCodeInput] = useState("");
   const [sessionId, setSessionId] = useState("");
-  const [avatarColor, setAvatarColor] = useState(AVATAR_COLORS[0]);
+  const [avatarColor, setAvatarColor] = useState(DEFAULT_PLAYER_COLOR);   // couleur choisie par le joueur
 
   const [title, setTitle] = useState("");
   const [artist, setArtist] = useState("");
@@ -69,9 +69,8 @@ export default function Player({ onResetMode }) {
   const [optionCount, setOptionCount] = useState(4);
   const [theme, setTheme] = useState("");               // manche 2
   const [audioSeconds, setAudioSeconds] = useState(null); // manche 4 : durée d'écoute
-  const [lobbyPlayers, setLobbyPlayers] = useState([]);   // pseudos connectés (écran d'attente)
+  const [lobbyPlayers, setLobbyPlayers] = useState([]);   // joueurs connectés { pseudo, color } (écran d'attente)
   const [status, setStatus] = useState(null);             // { answered, total, alive } : « 4 ont déjà répondu », « 11/16 en lice »
-  const [leaderboard, setLeaderboard] = useState([]);     // classement affiché à la révélation
   const [lastPoints, setLastPoints] = useState(0);        // points gagnés sur la chanson
 
   // Écran du téléphone maintenu allumé pendant toute la partie (pause, attente, classement…)
@@ -88,7 +87,7 @@ export default function Player({ onResetMode }) {
           setPseudo(data.pseudo);
         }
         if (data.gameCode) setCodeInput(data.gameCode);
-        if (data.avatarColor) setAvatarColor(data.avatarColor);
+        if (data.avatarColor) setAvatarColor(normalizePlayerColor(data.avatarColor));
       } catch (e) {
         localStorage.removeItem("musicose_session");
       }
@@ -160,19 +159,18 @@ export default function Player({ onResetMode }) {
           settled = true;
           clearTimeout(timeoutId);
           setIsConnecting(false);
-          connection.send({ type: "newPlayer", pseudo: finalPseudo, sessionId: finalSessionId });
+          connection.send({ type: "newPlayer", pseudo: finalPseudo, sessionId: finalSessionId, color: avatarColor });
           setJoinStep("joined");
         });
 
         connection.on("data", (data) => {
           if (data.type === "lobbyPlayers") {
-            setLobbyPlayers((data.players || []).map(pl => pl.pseudo));
+            setLobbyPlayers((data.players || []).map(pl => ({ pseudo: pl.pseudo, color: pl.color })));
           } else if (data.type === "statusUpdate") {
             setStatus(data.status || null);
           } else if (data.type === "startTimer") {
             setStatus(data.status || null);
             setLastPoints(0);
-            setLeaderboard([]);
             setShowRanking(false);   // une nouvelle chanson ferme le classement resté ouvert
             setCorrectAnswer(null);
             setSubmittedAnswer(null);
@@ -208,7 +206,6 @@ export default function Player({ onResetMode }) {
             setActiveRound4(false);
           } else if (data.type === "revealAnswer") {
             setCorrectAnswer({ title: data.title || "", artist: data.artist || "", correctIndex: data.correctIndex });
-            setLeaderboard(data.leaderboard || []);
             setCanPlay(false);
           } else if (data.type === "showRanking") {
             setRankingData(data.ranking || []);
@@ -287,6 +284,7 @@ export default function Player({ onResetMode }) {
       <ScreenJoin
         code={codeInput} onCode={setCodeInput}
         pseudo={pseudoInput} onPseudo={setPseudoInput}
+        color={avatarColor} onColor={setAvatarColor}
         onSubmit={handleJoinGame} connecting={isConnecting} error={joinError}
         hasSession={Boolean(sessionId && pseudo)}
         onResetMode={onResetMode}
@@ -300,79 +298,12 @@ export default function Player({ onResetMode }) {
 
   // ── CLASSEMENT DE FIN DE MANCHE ─────────────────────────────
   if (showRanking && !showFinalRanking) {
-    return <ScreenRanking pseudo={pseudo} ranking={rankingData.map(r => ({ pseudo: r.pseudo || r.name, score: r.score }))} onContinue={handleRankingContinue} />;
+    return <ScreenRanking round={currentRound} pseudo={pseudo} score={totalScore} ranking={rankingData.map(r => ({ pseudo: r.pseudo || r.name, score: r.score, color: r.color }))} />;
   }
 
-  // ── PODIUM FINAL ───────────────────────────────────────────
-  if (joinStep === "joined" && showFinalRanking) {
-    const top3 = rankingData.slice(0, 3);
-    const rest = rankingData.slice(3);
-    // Visual order: 2nd (left) – 1st (center) – 3rd (right)
-    const podiumSlots = [
-      { player: top3[1], rank: 2, color: 'var(--mo-cyan)',    darken: '#007a85', height: 130 },
-      { player: top3[0], rank: 1, color: 'var(--mo-gold)',    darken: '#c89900', height: 190 },
-      { player: top3[2], rank: 3, color: 'var(--mo-magenta)', darken: '#7a1648', height: 95  },
-    ];
-    const medals = ['🥇', '🥈', '🥉'];
-    return (
-      <div className="mo-app" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden' }}>
-        <Stars />
-        <GridFloor />
-        {/* Spotlight */}
-        <div style={{ position: 'absolute', top: -80, left: '50%', transform: 'translateX(-50%)', width: 700, height: 600, background: 'radial-gradient(ellipse at top, rgba(255,214,10,0.22), rgba(255,45,149,0.1) 40%, transparent 65%)', pointerEvents: 'none' }} />
-
-        {/* Title */}
-        <div style={{ position: 'relative', zIndex: 2, textAlign: 'center', padding: '36px 20px 16px' }}>
-          <div style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 10, letterSpacing: '0.4em', color: 'var(--mo-ink-dim)' }}>━━ FIN DE PARTIE ━━</div>
-          <h1 className="mo-display mo-neon" style={{ margin: '10px 0 0', fontSize: 'clamp(2.8rem, 14vw, 5.5rem)', color: 'var(--mo-gold)' }}>PODIUM</h1>
-        </div>
-
-        {/* Podium steps */}
-        <div style={{ position: 'relative', zIndex: 2, display: 'flex', justifyContent: 'center', alignItems: 'flex-end', gap: 10, padding: '0 12px', flex: 1 }}>
-          {podiumSlots.map(({ player, rank, color, darken, height }, i) => {
-            const big = rank === 1;
-            const initials = (player?.pseudo || '?').slice(0, 2).toUpperCase();
-            return (
-              <div key={rank} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1, maxWidth: 130 }}>
-                {/* Avatar */}
-                <div style={{ position: 'relative', marginBottom: 10 }}>
-                  <div style={{ width: big ? 76 : 60, height: big ? 76 : 60, borderRadius: '50%', background: `radial-gradient(circle at 30% 25%, ${color}, ${darken})`, border: `2px solid ${color}`, boxShadow: `0 0 20px ${color}, inset 0 0 10px rgba(0,0,0,0.3)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--mo-font-display)', color: 'var(--mo-bg-0)', fontSize: big ? 20 : 16 }}>{initials}</div>
-                  <div style={{ position: 'absolute', top: -6, right: -6, width: 22, height: 22, borderRadius: '50%', background: 'var(--mo-bg-0)', border: `2px solid ${color}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--mo-font-display)', color, fontSize: 10, boxShadow: `0 0 8px ${color}` }}>{rank}</div>
-                </div>
-                <div className="mo-display" style={{ color, fontSize: big ? 15 : 12, textAlign: 'center', textShadow: `0 0 8px ${color}`, marginBottom: 3, wordBreak: 'break-word', maxWidth: '100%', padding: '0 4px' }}>{player?.pseudo || '?'}</div>
-                <div style={{ fontFamily: 'var(--mo-font-mono)', fontSize: 9, color: 'var(--mo-ink-dim)', marginBottom: 10 }}>{(player?.score || 0)} pts</div>
-                {/* Step */}
-                <div style={{ width: '100%', height, background: `linear-gradient(180deg, ${color}35 0%, transparent 100%)`, border: `1.5px solid ${color}`, borderBottom: 'none', borderRadius: '8px 8px 0 0', boxShadow: `0 0 14px ${color}40`, position: 'relative', overflow: 'hidden' }}>
-                  <div style={{ position: 'absolute', top: big ? 10 : 6, left: 0, right: 0, textAlign: 'center', fontFamily: 'var(--mo-font-display)', fontSize: big ? 52 : 38, color: `${color}30` }}>{rank}</div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* 4th and below */}
-        {rest.length > 0 && (
-          <div style={{ position: 'relative', zIndex: 2, padding: '14px 20px 0', borderTop: '1px solid var(--mo-line)' }}>
-            {rest.map((player, i) => (
-              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0', borderBottom: '1px solid var(--mo-line)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span className="mo-display" style={{ fontSize: 11, color: 'var(--mo-ink-dim)', width: 24 }}>#{i + 4}</span>
-                  <span style={{ fontFamily: 'var(--mo-font-display)', fontSize: 13 }}>{player.pseudo}</span>
-                </div>
-                <span className="mo-display" style={{ fontSize: 13, color: 'var(--mo-ink-dim)' }}>{player.score} pts</span>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* CTA */}
-        <div style={{ position: 'relative', zIndex: 2, padding: '18px 20px 36px' }}>
-          <Btn variant="gold" onClick={handleRankingContinue} style={{ width: '100%' }}>
-            REJOUER UNE PARTIE →
-          </Btn>
-        </div>
-      </div>
-    );
+  // ── PODIUM FINAL ────────────────────────────────────────────
+  if (showFinalRanking) {
+    return <ScreenPodium pseudo={pseudo} ranking={rankingData.map(r => ({ pseudo: r.pseudo || r.name, score: r.score, color: r.color }))} onReplay={handleRankingContinue} />;
   }
 
   // ── RÉVÉLATION DE LA RÉPONSE ────────────────────────────────
@@ -397,7 +328,7 @@ export default function Player({ onResetMode }) {
     } else if (eliminated) {
       label = 'ÉLIMINÉ·E'; sub = 'Tu rejoins les spectateurs';
     } else {
-      label = answered ? 'RATÉ' : 'TEMPS ÉCOULÉ'; sub = `Réponse : ${correctAnswer.title}`;
+      label = answered ? 'RATÉ' : 'TEMPS ÉCOULÉ'; sub = answered ? 'Raté pour cette fois' : 'Le temps est écoulé';
     }
 
     const bonuses = [];
@@ -412,9 +343,8 @@ export default function Player({ onResetMode }) {
 
     return (
       <ScreenReveal
-        pseudo={pseudo} outcome={outcome} points={lastPoints} label={label} sub={sub}
-        correct={correctAnswer} mine={mine} bonuses={bonuses} ranking={leaderboard}
-        onContinue={() => { setCorrectAnswer(null); setSubmittedAnswer(null); }}
+        round={currentRound} pseudo={pseudo} score={totalScore} outcome={outcome} points={lastPoints} label={label} sub={sub}
+        correct={correctAnswer} mine={mine} bonuses={bonuses}
       />
     );
   }

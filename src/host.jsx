@@ -9,7 +9,7 @@ import {
   roundForIndex, isEndOfRound, isRoundStart, isCorrect, isArtistCorrect,
   scoreTextAnswer, round3BonusForPosition, scoreChoiceRound,
   buildOptions, themeFor, adjustedScores, POINTS,
-  generateGameCode, peerIdFromCode,
+  generateGameCode, peerIdFromCode, normalizePlayerColor,
 } from "./gameLogic";
 import MicIcon from "./components/MicIcon";
 
@@ -78,7 +78,7 @@ export default function Host() {
   // Broadcast lobby state (code + player list) to grand écran(s)
   useEffect(() => {
     if (geConnections.length === 0) return;
-    const playerList = Object.values(players).map(p => ({ pseudo: p.pseudo, totalScore: p.totalScore || 0, alive: p.activeRound4 !== false }));
+    const playerList = Object.values(players).map(p => ({ pseudo: p.pseudo, totalScore: p.totalScore || 0, alive: p.activeRound4 !== false, color: p.color }));
     geConnections.forEach(conn => {
       try { conn.send({ type: "lobbyState", shortCode: shortCodeRef.current, players: playerList }); } catch (e) { /* ignore */ }
     });
@@ -86,7 +86,7 @@ export default function Host() {
 
   // Liste des joueurs connectés, affichée sur l'écran d'attente des téléphones
   useEffect(() => {
-    const playerList = Object.values(players).map(p => ({ pseudo: p.pseudo }));
+    const playerList = Object.values(players).map(p => ({ pseudo: p.pseudo, color: p.color }));
     Object.values(connBySessionRef.current).forEach(c => {
       try { c.send({ type: "lobbyPlayers", players: playerList }); } catch (e) { /* ignore */ }
     });
@@ -142,7 +142,7 @@ export default function Host() {
   const sendRankingToPlayers = () => {
     const ranking = Object.values(playersRef.current)
       .sort((a, b) => (b.totalScore || 0) - (a.totalScore || 0))
-      .map(p => ({ pseudo: p.pseudo, score: p.totalScore }));
+      .map(p => ({ pseudo: p.pseudo, score: p.totalScore, color: p.color }));
     playerConnections().forEach(conn => {
       try { conn.send({ type: "showRanking", ranking }); } catch (e) { /* ignore */ }
     });
@@ -233,7 +233,7 @@ export default function Host() {
   const buildRanking = () => {
     return Object.values(playersRef.current)
       .sort((a, b) => (b.totalScore || 0) - (a.totalScore || 0))
-      .map(p => ({ pseudo: p.pseudo, score: p.totalScore }));
+      .map(p => ({ pseudo: p.pseudo, score: p.totalScore, color: p.color }));
   };
 
   const sendFinalRanking = () => {
@@ -320,7 +320,7 @@ export default function Host() {
               if (existingPlayer) {
                 setPlayers(prev => ({
                   ...prev,
-                  [sessionId]: { ...prev[sessionId], peerId: conn.peer },
+                  [sessionId]: { ...prev[sessionId], peerId: conn.peer, color: normalizePlayerColor(data.color) },
                 }));
                 conn.send({
                   type: "sessionRestored",
@@ -335,6 +335,7 @@ export default function Host() {
                       ...prev,
                       [sessionId]: {
                         pseudo: savedScore.pseudo || data.pseudo,
+                        color: normalizePlayerColor(data.color),
                         scorePerRound: savedScore.scorePerRound || [0, 0, 0, 0],
                         totalScore: savedScore.totalScore || 0,
                         activeRound4: true,
@@ -351,7 +352,7 @@ export default function Host() {
                       ...prev,
                       [sessionId]: {
                         pseudo: data.pseudo,
-                        scorePerRound: [0, 0, 0, 0],
+                        color: normalizePlayerColor(data.color),                        scorePerRound: [0, 0, 0, 0],
                         totalScore: 0,
                         activeRound4: true,
                         peerId: conn.peer,
@@ -594,7 +595,7 @@ export default function Host() {
     }
 
     playerConnections().forEach(c => {
-      try { c.send({ type: "revealAnswer", title: songToReveal.title, artist: songToReveal.artist, leaderboard: buildRanking(), ...playerExtra }); } catch (e) {}
+      try { c.send({ type: "revealAnswer", title: songToReveal.title, artist: songToReveal.artist, ...playerExtra }); } catch (e) {}
     });
     geConnections.forEach(c => {
       try { c.send({ type: "revealAnswer", title: songToReveal.title, artist: songToReveal.artist, stats, songIndex: currentSongIndex, ...geExtra }); } catch (e) { /* ignore */ }
@@ -645,7 +646,7 @@ export default function Host() {
     if (songToReveal) {
       const correctIndex = currentRound === 1 && roundOptionsRef.current ? { correctIndex: roundOptionsRef.current.correctIndex } : {};
       playerConnections().forEach(c => {
-        try { c.send({ type: "revealAnswer", title: songToReveal.title, artist: songToReveal.artist, leaderboard: buildRanking(), ...correctIndex }); } catch (e) {}
+        try { c.send({ type: "revealAnswer", title: songToReveal.title, artist: songToReveal.artist, ...correctIndex }); } catch (e) {}
       });
     }
     goToSong(newIdx);
@@ -1097,6 +1098,7 @@ export default function Host() {
                         fontSize: 12,
                         color: i === 0 ? 'var(--mo-gold)' : i === 1 ? 'var(--mo-cyan)' : i === 2 ? 'var(--mo-magenta)' : 'var(--mo-ink-dim)',
                       }}>#{i + 1}</span>
+                      {p.color && <span style={{ width: 10, height: 10, background: p.color, display: 'inline-block' }} />}
                       <span style={{ fontFamily: 'var(--mo-font-display)', fontSize: 12 }}>{p.pseudo}</span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>

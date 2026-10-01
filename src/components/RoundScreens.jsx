@@ -1,6 +1,8 @@
 import React from "react";
 import { MIC_CHOICES, MAX_PLAYERS, joinUrl, progressForIndex, ROUND_CONFIG, TOTAL_SONGS } from "../gameLogic";
-import { ROUND_THEMES, BASE_THEME, PILL_COLORS, roundSeconds, buildBars, rnd, formatSeconds } from "../roundThemes";
+import { ROUND_THEMES, BASE_THEME, PILL_COLORS, roundSeconds, buildBars, barVanishOrder, vanishedBars, rnd, formatSeconds } from "../roundThemes";
+import { APP_VERSION } from "../gameLogic";
+import { tipsText } from "../tips";
 import MicIcon from "./MicIcon";
 import QrCode from "./QrCode";
 import "../styles/grandEcran.css";
@@ -32,7 +34,7 @@ export function JoinTile({ m, code, side = 'left', bottom = 78 }) {
   );
 }
 
-function Stage({ m, children }) {
+function Stage({ m, children, hideVersion }) {
   return (
     <div style={{
       position: 'absolute', left: 0, top: 0, width: 1280, height: 720, overflow: 'hidden',
@@ -40,6 +42,9 @@ function Stage({ m, children }) {
       background: m.bg, color: m.fg, fontFamily: MONO,
     }}>
       {children}
+      {!hideVersion && (
+        <div data-version style={{ position: 'absolute', left: 0, right: 0, bottom: 20, textAlign: 'center', font: `500 14px ${MONO}`, letterSpacing: '.3em', opacity: 0.75, zIndex: 4, pointerEvents: 'none' }}>{APP_VERSION}</div>
+      )}
     </div>
   );
 }
@@ -180,12 +185,14 @@ function OptionsGrid({ options }) {
 }
 
 /* ── Manche en cours ──────────────────────────────────────── */
-export function ScreenRound({ code, round, remaining, answers, players, progress, options, theme, musicCut, fastestList }) {
+export function ScreenRound({ code, round, remaining, total, answers, players, progress, options, theme, musicCut, fastestList, songIndex = 0 }) {
   const m = ROUND_THEMES[round];
   const p = progress || progressForIndex(ROUND_CONFIG[round].start);
   const cd = String(Math.max(0, Math.ceil(remaining))).padStart(2, '0');
   const aliveList = players.map(pl => pl.alive !== false);
-  const bars = buildBars(round, aliveList);
+  const bars = buildBars(round);
+  // Manche 4 : les barres de son s'éteignent au hasard pendant le décompte
+  const gone = round === 4 ? new Set(barVanishOrder(bars.length, songIndex).slice(0, vanishedBars(bars.length, (total || 0) - remaining, total || 0))) : new Set();
   const quiz = round === 1 && options;   // manche 1 : propositions en grand, égaliseur réduit
 
   return (
@@ -209,18 +216,10 @@ export function ScreenRound({ code, round, remaining, answers, players, progress
         {m.t1}<br />{m.t2}
       </div>
 
-      <div style={{ position: 'absolute', left: quiz ? 36 : 48, top: quiz ? 186 : 285, display: 'flex', gap: 16, alignItems: 'flex-end', flexWrap: 'wrap', width: quiz ? 290 : 'auto' }}>
-        <span style={{ font: `800 ${quiz ? 104 : 120}px/.8 ${TEKTUR}`, color: m.b }}>{cd}</span>
-        <span style={{ font: `500 ${quiz ? 16 : 18}px ${MONO}`, paddingBottom: 6 }}>S · {answers.count}/{answers.total} RÉPONSES</span>
-      </div>
-
-      {/* Numéro de question toujours bien visible */}
-      <div style={{ position: 'absolute', left: quiz ? 36 : 'auto', right: quiz ? 'auto' : 380, top: quiz ? 330 : 300, textAlign: quiz ? 'left' : 'right' }}>
-        <div style={{ font: `500 14px ${MONO}`, letterSpacing: '.3em', color: m.a }}>QUESTION</div>
-        <div style={{ font: `800 ${quiz ? 54 : 46}px/1 ${TEKTUR}`, color: m.fg }}>
-          {pad2(p.number)}<span style={{ color: m.b }}>/{p.size}</span>
-        </div>
-        <div style={{ font: `500 14px ${MONO}`, opacity: .8, marginTop: 2 }}>{pad2(p.global)} / {p.total} AU TOTAL</div>
+      {/* Décompte : positions fixes, le « S » et les réponses ne bougent jamais d'un chiffre à l'autre */}
+      <div style={{ position: 'absolute', left: quiz ? 36 : 48, top: quiz ? 186 : 285, width: quiz ? 290 : 420, height: quiz ? 128 : 112 }}>
+        <div data-countdown style={{ position: 'absolute', left: 0, top: 0, width: quiz ? 180 : 200, height: quiz ? 104 : 112, font: `800 ${quiz ? 104 : 120}px/${quiz ? 104 : 112}px ${TEKTUR}`, color: m.b, whiteSpace: 'nowrap' }}>{cd}</div>
+        <div data-countdown-label style={{ position: 'absolute', left: quiz ? 0 : 176, top: quiz ? 110 : 82, font: `500 ${quiz ? 16 : 18}px/20px ${MONO}`, whiteSpace: 'nowrap' }}>S · {answers.count}/{answers.total} RÉPONSES</div>
       </div>
 
       {round === 2 && theme && (
@@ -247,15 +246,18 @@ export function ScreenRound({ code, round, remaining, answers, players, progress
         position: 'absolute', left: 200, right: 36, bottom: 72, height: quiz ? 60 : 150, display: 'flex', justifyContent: 'center',
         gap: m.bars.gap, alignItems: 'flex-end', WebkitBoxReflect: quiz ? 'none' : 'below 4px linear-gradient(transparent 40%,rgba(255,255,255,.3))',
       }}>
-        {bars.map((b, i) => (
-          <div key={i} className={b.dead ? 'ge-bar ge-bar--dead' : 'ge-bar'} style={{
-            flex: 1, height: `${b.h}%`, opacity: b.dead ? 0.35 : 1, transformOrigin: 'bottom left', transition: 'transform .8s, opacity .8s',
-            transform: b.dead ? 'translateY(70px) rotate(8deg) scaleY(.2)' : 'none',
-            '--dur': `${b.dur}s`, '--delay': `${b.delay}s`,
-          }}>
-            <div style={{ width: '100%', height: '100%', transformOrigin: 'bottom', background: b.dead ? '#3a3a3a' : m.bars.fill, boxShadow: `0 0 12px ${b.dead ? 'transparent' : m.bars.glow}` }} />
-          </div>
-        ))}
+        {bars.map((b, i) => {
+          const off = gone.has(i);
+          return (
+            <div key={i} data-bar={off ? 'off' : 'on'} className={off ? 'ge-bar ge-bar--dead' : 'ge-bar'} style={{
+              flex: 1, height: `${b.h}%`, opacity: off ? 0 : 1, transformOrigin: 'bottom left', transition: 'transform .6s, opacity .6s',
+              transform: off ? 'translateY(40px) scaleY(.1)' : 'none',
+              '--dur': `${b.dur}s`, '--delay': `${b.delay}s`,
+            }}>
+              <div style={{ width: '100%', height: '100%', transformOrigin: 'bottom', background: m.bars.fill, boxShadow: `0 0 12px ${m.bars.glow}` }} />
+            </div>
+          );
+        })}
       </div>
 
       <Bar m={m}>
@@ -267,38 +269,68 @@ export function ScreenRound({ code, round, remaining, answers, players, progress
 }
 
 /* ── Annonce de la manche (maquette « Transitions ») ───────── */
+function RuleTile({ m, t, i, n }) {
+  const wide = n <= 3;
+  return (
+    <div className="ge-lift" data-tile style={{
+      width: wide ? 200 : 158, boxSizing: 'border-box', padding: '12px 14px 10px', transform: 'skewX(-8deg)',
+      border: `2px solid ${i === n - 1 && n === 4 ? m.a : m.b}`, background: m.panel, animationDelay: `${0.5 + i * 0.12}s`,
+      boxShadow: `0 0 18px ${m.bars.glow}`,
+    }}>
+      <div style={{ font: `italic 800 ${t.v.length > 6 ? 30 : 44}px/1 ${TEKTUR}`, color: i === 0 ? m.fg : m.b, whiteSpace: 'nowrap' }}>{t.v}</div>
+      <div style={{ font: `500 12px/1.3 ${MONO}`, letterSpacing: '.15em', marginTop: 8 }}>{t.l}</div>
+      {t.s && <div style={{ font: `500 11px/1.3 ${MONO}`, letterSpacing: '.1em', color: m.a, marginTop: 4 }}>{t.s}</div>}
+    </div>
+  );
+}
+
+// Bandeau défilant du bas : comment rejoindre, règles « maison »…
+function Ticker({ m, code }) {
+  const text = tipsText(code);
+  return (
+    <div data-ticker style={{
+      position: 'absolute', left: 0, right: 0, bottom: 0, height: 60, boxSizing: 'border-box', background: m.bg, borderTop: `1px solid ${m.b}`,
+      overflow: 'hidden', display: 'flex', alignItems: 'center', zIndex: 3,
+    }}>
+      <div className="ge-ticker" style={{ font: `500 20px ${MONO}`, letterSpacing: '.12em', whiteSpace: 'nowrap', color: m.fg }}>
+        <span>{text}   ✦   </span><span>{text}   ✦   </span>
+      </div>
+      <div data-version style={{ position: 'absolute', right: 0, top: 0, bottom: 0, display: 'flex', alignItems: 'center', padding: '0 24px', background: m.bg, borderLeft: `1px solid ${m.b}`, font: `500 16px ${MONO}`, letterSpacing: '.25em', color: m.b }}>{APP_VERSION}</div>
+    </div>
+  );
+}
+
 export function ScreenTransition({ round, code }) {
   const m = ROUND_THEMES[round];
-  const size = ROUND_CONFIG[round].end - ROUND_CONFIG[round].start + 1;
-  const bars = buildBars(round, null);
+  const p = progressForIndex(ROUND_CONFIG[round].start);
+  const bars = buildBars(round);
   return (
-    <Stage m={m}>
+    <Stage m={m} hideVersion>
       <Sun m={m} size={380} right={110} top={100} gradient={m.sun} opacity={round === 2 ? 0.35 : 0.9} />
       <GridFloor m={{ ...m, gridA: m.annGrid, gridB: m.annGrid }} top={440} height={500} scroll />
       <Bar m={m} top>
-        <span>MANCHE {pad2(round)} · {size} QUESTIONS · {pad2(ROUND_CONFIG[round].start + 1)} → {pad2(ROUND_CONFIG[round].end + 1)} / {TOTAL_SONGS}</span>
+        <span>{progressText(p)}</span>
         <span>{brand(code)}</span>
       </Bar>
-      <div style={{ position: 'absolute', left: 70, top: 78, display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ position: 'absolute', left: 70, top: 84, display: 'flex', flexDirection: 'column', gap: 14 }}>
         <div className="ge-pop" style={{ font: `italic 800 150px/.8 ${TEKTUR}`, color: round === 4 ? m.a : m.b, transformOrigin: 'left bottom' }}>{pad2(round)}</div>
         <div className="ge-lift" style={{ font: `italic 800 96px/.9 ${TEKTUR}`, textShadow: `6px 6px 0 ${m.a}`, whiteSpace: 'nowrap' }}>{m.t1}<br />{m.t2}</div>
-        <div className="ge-fade" style={{ font: `500 24px/1.5 ${MONO}`, maxWidth: 680, animationDelay: '.4s' }}>{m.rule}</div>
       </div>
-      <BarsRow bars={bars} fill={m.bars.fill} glow={m.bars.glow} gap={m.bars.gap} />
-      <JoinTile m={m} code={code} side="left" bottom={64} />
-      <Bar m={m}>
-        <span>{roundSeconds(round)} S</span>
-        <span>{m.pts}</span>
-      </Bar>
+      <div style={{ position: 'absolute', left: 70, top: 408, display: 'flex', gap: 14 }}>
+        {m.tiles.map((t, i) => <RuleTile key={t.l} m={m} t={t} i={i} n={m.tiles.length} />)}
+      </div>
+      <BarsRow bars={bars} fill={m.bars.fill} glow={m.bars.glow} gap={m.bars.gap} height={70} left={36} right={190} />
+      <JoinTile m={m} code={code} side="right" bottom={72} />
+      <Ticker m={m} code={code} />
     </Stage>
   );
 }
 
 /* Égaliseur du bas d'écran (barres animées en CSS) */
-function BarsRow({ bars, fill, glow, gap, height = 150, colors }) {
+function BarsRow({ bars, fill, glow, gap, height = 150, colors, left = 200, right = 36 }) {
   return (
     <div style={{
-      position: 'absolute', left: 200, right: 36, bottom: 72, height, display: 'flex', justifyContent: 'center',
+      position: 'absolute', left, right, bottom: 72, height, display: 'flex', justifyContent: 'center',
       gap, alignItems: 'flex-end', WebkitBoxReflect: 'below 4px linear-gradient(transparent 40%,rgba(255,255,255,.3))',
     }}>
       {bars.map((b, i) => (
@@ -468,9 +500,9 @@ export function ScreenLobby({ code, players }) {
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 12px', alignContent: 'flex-start', overflow: 'hidden', maxHeight: 96 }}>
           {shown.map((pl, i) => (
-            <div key={pl.pseudo + i} className="ge-pop" style={{ display: 'flex', alignItems: 'center', gap: 8, background: m.panel, padding: '3px 12px 3px 3px', border: `1px solid ${BASE_THEME.bars[i % 4]}` }}>
+            <div key={pl.pseudo + i} data-player={pl.pseudo} data-color={pl.color || ''} className="ge-pop" style={{ display: 'flex', alignItems: 'center', gap: 8, background: m.panel, padding: '3px 12px 3px 3px', border: `1px solid ${pl.color || BASE_THEME.bars[i % 4]}` }}>
               <div style={{
-                width: 30, height: 30, background: BASE_THEME.bars[i % 4], color: m.bg,
+                width: 30, height: 30, background: pl.color || BASE_THEME.bars[i % 4], color: m.bg,
                 display: 'flex', alignItems: 'center', justifyContent: 'center', font: `800 12px ${TEKTUR}`,
               }}>{(pl.pseudo || '?').slice(0, 2).toUpperCase()}</div>
               <span style={{ font: `500 15px ${MONO}`, maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pl.pseudo}</span>
@@ -558,7 +590,7 @@ export function ScreenReveal({ round, info, code, progress }) {
 
 /* Ligne de classement : glisse jusqu'à sa nouvelle place et compte ses points */
 const ROW_STEP = 60;
-function StandingRow({ m, pseudo, from, to, prevScore, score, go, max }) {
+function StandingRow({ m, pseudo, color: playerColor, from, to, prevScore, score, go, max }) {
   const [shown, setShown] = React.useState(prevScore);
   React.useEffect(() => {
     if (!go) { setShown(prevScore); return undefined; }
@@ -586,7 +618,10 @@ function StandingRow({ m, pseudo, from, to, prevScore, score, go, max }) {
     }}>
       <div style={{ position: 'absolute', left: 0, bottom: 0, height: 3, width: `${(shown / max) * 100}%`, background: color, opacity: .8 }} />
       <span style={{ font: `800 32px ${TEKTUR}`, color }}>{pos + 1}</span>
-      <span style={{ font: `500 28px ${TEKTUR}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pseudo}</span>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+        {playerColor && <span style={{ width: 18, height: 18, flex: '0 0 auto', background: playerColor }} />}
+        <span style={{ font: `500 28px ${TEKTUR}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pseudo}</span>
+      </span>
       <span style={{ font: `800 20px ${TEKTUR}`, color: moved > 0 ? m.b : m.a, opacity: go && moved !== 0 ? 1 : 0, transition: 'opacity .4s ease .9s' }}>
         {moved > 0 ? `▲${moved}` : moved < 0 ? `▼${-moved}` : ''}
       </span>
@@ -626,7 +661,7 @@ export function ScreenStandings({ round, ranking, prevRanking, code }) {
         {rows.map((r, i) => {
           const pi = prevIndexOf(r.pseudo, ranking.length + i);
           const pr = prev.find(x => x.pseudo === r.pseudo);
-          return <StandingRow key={r.pseudo} m={m} pseudo={r.pseudo} from={pi} to={i} prevScore={pr ? (pr.score || 0) : 0} score={r.score || 0} go={go} max={max} />;
+          return <StandingRow key={r.pseudo} m={m} pseudo={r.pseudo} color={r.color} from={pi} to={i} prevScore={pr ? (pr.score || 0) : 0} score={r.score || 0} go={go} max={max} />;
         })}
       </div>
 
@@ -662,6 +697,7 @@ export function ScreenPodium({ ranking, code }) {
             animationDelay: `${PODIUM_DELAYS[rank]}s`, animationDuration: rank === 1 ? '1.2s' : '.9s',
           }}>
             <div style={{ textAlign: 'center', marginBottom: 8 }}>
+              {p && p.color && <div style={{ width: rank === 1 ? 34 : 28, height: rank === 1 ? 34 : 28, background: p.color, margin: '0 auto 6px', boxShadow: `0 0 14px ${p.color}` }} />}
               <div style={{ font: `800 ${rank === 1 ? 32 : 26}px/1.05 ${TEKTUR}`, wordBreak: 'break-word' }}>{p ? p.pseudo : '—'}</div>
               <div style={{ font: `500 18px ${MONO}`, color: m.b, marginTop: 4 }}>{p ? `${(p.score || 0).toLocaleString('fr-FR')} PTS` : ''}</div>
             </div>

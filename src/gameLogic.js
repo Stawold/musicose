@@ -228,3 +228,12 @@ export const parseJoinCode = (search) => {
   const c = new URLSearchParams(search).get('join');
   return c && isGameCode(c) ? c.trim().toUpperCase() : null;
 };
+
+// ── Version affichée en bas du grand écran ─────────────────────
+export const APP_VERSION = 'V.3.0';
+
+// ── Couleur choisie par chaque joueur ──────────────────────────
+export const PLAYER_COLORS = ['#FFC933', '#FF5A4E', '#FF2E93', '#00E5FF', '#8FB0FF', '#2FD27A', '#B14BFF', '#FFF3D6'];
+export const DEFAULT_PLAYER_COLOR = PLAYER_COLORS[0];
+// Couleur valide de la palette, sinon couleur par défaut (le message vient d'un téléphone : on ne lui fait pas confiance)
+export const normalizePlayerColor = (c) => (PLAYER_COLORS.includes(c) ? c : DEFAULT_PLAYER_COLOR);

@@ -6,6 +6,7 @@ import {
   scoreChoiceRound, buildOptions, themeFor, adjustedScores,
   generateGameCode, peerIdFromCode, isGameCode, GAME_CODE_ALPHABET,
   progressForIndex, joinUrl, parseJoinCode, isRoundStart, MIC_CHOICES,
+  APP_VERSION, PLAYER_COLORS, DEFAULT_PLAYER_COLOR, normalizePlayerColor,
 } from '../src/gameLogic.js';
 
 // Playlist factice de 65 chansons
@@ -197,4 +198,19 @@ test('micros : 4 couleurs différentes, lettres A à D (mêmes couleurs sur tél
   assert.deepEqual(MIC_CHOICES.map(m => m.letter), ['A', 'B', 'C', 'D']);
   assert.equal(new Set(MIC_CHOICES.map(m => m.color)).size, 4);
   assert.deepEqual(MIC_CHOICES.map(m => m.color), ['#FFC933', '#FF5A4E', '#FFF3D6', '#8FB0FF']);   // maquette téléphone, manche 1
+});
+
+test('version affichée', () => {
+  assert.equal(APP_VERSION, 'V.3.0');
+});
+
+test('couleurs des joueurs : palette de 8 couleurs distinctes, valeur inconnue = couleur par défaut', () => {
+  assert.equal(PLAYER_COLORS.length, 8);
+  assert.equal(new Set(PLAYER_COLORS).size, 8);
+  assert.ok(PLAYER_COLORS.every(c => /^#[0-9A-F]{6}$/i.test(c)));
+  assert.equal(normalizePlayerColor('#FF2E93'), '#FF2E93');
+  assert.equal(normalizePlayerColor('red'), DEFAULT_PLAYER_COLOR);
+  assert.equal(normalizePlayerColor(undefined), DEFAULT_PLAYER_COLOR);
+  assert.equal(normalizePlayerColor('var(--mo-magenta)'), DEFAULT_PLAYER_COLOR);   // anciennes sessions sauvegardées
+  assert.equal(normalizePlayerColor('<script>'), DEFAULT_PLAYER_COLOR);
 });

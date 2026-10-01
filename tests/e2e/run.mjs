@@ -73,6 +73,7 @@ try {
   await ge.waitForSelector(`text=${CODE}`);
 
   // ── Téléphones ─────────────────────────────────────────────
+  const COLORS = { Alice: '#FF2E93', Bob: '#00E5FF', Cleo: '#2FD27A' };
   const makePlayer = async (pseudo, sid) => {
     const p = await context.newPage();
     await p.setViewportSize({ width: 390, height: 850 });
@@ -85,12 +86,24 @@ try {
         window.__wl.requests++; window.__wl.active++; window.__wl.last = s; return s;
       } } });
     });
-    await p.addInitScript(([pseudo, sid, code]) => {
+    await p.addInitScript(([pseudo, sid, code, color]) => {
       localStorage.setItem('musicose_mode', 'player');
-      localStorage.setItem('musicose_session', JSON.stringify({ sessionId: sid, pseudo, gameCode: code, avatarColor: 'var(--mo-magenta)' }));
-    }, [pseudo, sid, CODE]);
+      localStorage.setItem('musicose_session', JSON.stringify({ sessionId: sid, pseudo, gameCode: code, avatarColor: color }));
+    }, [pseudo, sid, CODE, COLORS[pseudo]]);
     await p.goto(BASE);
-    if (pseudo === 'Alice') await shot(p, 'tel-connexion');
+    if (pseudo === 'Alice') {
+      await shot(p, 'tel-connexion');
+      const fits = () => p.evaluate(() => { const sh = document.querySelector('[data-screen="join"]'); const btn = [...document.querySelectorAll('button')].find(b => /ENTRER EN SCÈNE/.test(b.textContent)); const r = btn.getBoundingClientRect(); return { clipped: sh.scrollHeight - sh.clientHeight, btnBottom: Math.round(r.bottom), h: innerHeight, docScroll: document.documentElement.scrollHeight - innerHeight }; });
+      const f1 = await fits();
+      check('téléphone : la connexion tient sur une seule page, sans défilement (390×850)', f1.clipped <= 1 && f1.btnBottom <= f1.h && f1.docScroll <= 1, JSON.stringify(f1));
+      await p.setViewportSize({ width: 375, height: 667 });
+      await sleep(200);
+      const f2 = await fits();
+      await shot(p, 'tel-connexion-petit');
+      check('téléphone : la connexion tient aussi sur un petit écran (375×667)', f2.clipped <= 1 && f2.btnBottom <= f2.h && f2.docScroll <= 1, JSON.stringify(f2));
+      await p.setViewportSize({ width: 390, height: 850 });
+    }
+    check(`téléphone ${pseudo} : couleur choisie pré-sélectionnée parmi 8`, await p.locator('[role="radio"]').count() === 8 && (await p.locator(`[role="radio"][data-color="${COLORS[pseudo]}"]`).getAttribute('aria-checked')) === 'true');
     await p.getByRole('button', { name: /ENTRER EN SCÈNE/ }).click();
     await p.waitForSelector('text=JOUEURS CONNECTÉS');
     return p;
@@ -116,6 +129,11 @@ try {
   check('salle d’attente : logo Music’Ose animé (9 lettres qui dansent)', dancing === 9, String(dancing));
   const codeBox = await ge.evaluate(() => { const el = [...document.querySelectorAll('div')].find(d => /^OSE-\w{4}$/.test(d.textContent) && d.children.length === 0); const r = el.getBoundingClientRect(); return { w: r.width, h: r.height }; });
   check('salle d’attente : code en très grand', codeBox.h > 60 && codeBox.w > 300, JSON.stringify(codeBox));
+  const geChips = await ge.evaluate(() => Object.fromEntries([...document.querySelectorAll('[data-player]')].map(el => [el.dataset.player, el.dataset.color])));
+  check('salle d’attente : chaque joueur a la couleur qu’il a choisie (grand écran)', geChips.Alice === COLORS.Alice && geChips.Bob === COLORS.Bob && geChips.Cleo === COLORS.Cleo, JSON.stringify(geChips));
+  const phoneChips = await alice.evaluate(() => Object.fromEntries([...document.querySelectorAll('[data-player]')].map(el => [el.dataset.player, el.dataset.color])));
+  check('salle d’attente : mêmes couleurs sur la liste des téléphones', phoneChips.Alice === COLORS.Alice && phoneChips.Bob === COLORS.Bob && phoneChips.Cleo === COLORS.Cleo, JSON.stringify(phoneChips));
+  check('grand écran : « V.3.0 » affiché en bas de la salle d’attente', (await ge.locator('[data-version]').first().innerText()) === 'V.3.0');
 
   // ── Helpers ────────────────────────────────────────────────
   const hostScore = (name) => host.evaluate((name) => {
@@ -162,8 +180,16 @@ try {
   await sleep(1300);
   check('l’effet se termine tout seul', await ge.locator('[data-transition]').count() === 0);
   const trText = (await ge.locator('body').innerText()).replace(/\s+/g, ' ');
-  check('transition : manche 1 annoncée (numéro, nom, règle, durée, points)',
-    /01/.test(trText) && /CHANSONS/.test(trText) && /EN RAFALE/.test(trText) && /Choisis le bon micro/.test(trText) && /30 S/.test(trText) && /1 PT \+ BONUS \+1/.test(trText), trText.slice(0, 250));
+  check('annonce : numéro, nom et règles sous forme de tuiles (30 S · 1 PT · +1)',
+    /01/.test(trText) && /CHANSONS/.test(trText) && /EN RAFALE/.test(trText) && await ge.locator('[data-tile]').count() === 3 && /30 S POUR RÉPONDRE/.test(trText) && /1 PT BONNE RÉPONSE/.test(trText) && /\+1 LE PLUS RAPIDE/.test(trText) && !/Choisis le bon micro/.test(trText), trText.slice(0, 300));
+  check('annonce : en-tête « MANCHE 01 · QUESTION 01/15 » + nom du jeu et code', /MANCHE 01 · QUESTION 01\/15/.test(trText) && trText.includes(`MUSIC'OSE · ${CODE}`), trText.slice(0, 200));
+  const ticker = await ge.locator('[data-ticker]').innerText();
+  check('annonce : bas d’écran = texte défilant (comment rejoindre, règles drôles)', ticker.includes(CODE) && /RÈGLE N°1/.test(ticker) && /SOUDOYER/.test(ticker), ticker.slice(0, 120));
+  const tx1 = await ge.evaluate(() => new DOMMatrix(getComputedStyle(document.querySelector('.ge-ticker')).transform).m41);
+  await sleep(1200);
+  const tx2 = await ge.evaluate(() => new DOMMatrix(getComputedStyle(document.querySelector('.ge-ticker')).transform).m41);
+  check('annonce : le texte défile en continu', tx2 < tx1, `${tx1} → ${tx2}`);
+  check('annonce : plus de phrase de règle en paragraphe', !/L’un des deux : 2 pts\./.test(trText) && !/Titre \+ artiste : 5 pts\./.test(trText));
   await shot(ge, 'ge-transition1');
   await start();
   await shot(ge, 'ge-manche1'); await shot(alice, 'tel-manche1');
@@ -176,6 +202,16 @@ try {
   check('manche 1 : barre de son réduite (≤ 70 px)', barH <= 70, String(barH));
   const geR1 = (await ge.locator('body').innerText()).replace(/\s+/g, ' ');
   check('manche 1 : numéro de question et total toujours visibles (1/15 · 1/65)', /QUESTION 01\/15 · TOTAL 01\/65/.test(geR1), geR1.slice(0, 200));
+  check('manche 1 : plus de doublon « question » au centre (une seule mention, dans l’en-tête)', (geR1.match(/QUESTION/g) || []).length === 1 && !/AU TOTAL/.test(geR1), geR1.slice(0, 300));
+  check('manche 1 : « V.3.0 » affiché en bas', (await ge.locator('[data-version]').first().innerText()) === 'V.3.0');
+  {
+    const small = await cleo.viewportSize();
+    await cleo.setViewportSize({ width: 375, height: 667 }); await sleep(250);
+    const sc = await cleo.evaluate(() => ({ doc: document.documentElement.scrollHeight - innerHeight, sh: (() => { const s = document.querySelector('[data-screen="game"]'); return s.scrollHeight - s.clientHeight; })() }));
+    check('téléphone : l’écran de jeu (4 micros) tient sans défilement sur un petit écran (375×667)', sc.doc <= 1 && sc.sh <= 1, JSON.stringify(sc));
+    await shot(cleo, 'tel-manche1-petit');
+    await cleo.setViewportSize(small);
+  }
   check('en cours de partie : QR code et code de partie restent affichés', await ge.locator('svg[data-url]').count() === 1 && geR1.includes(CODE) && /REJOINS/.test(geR1));
   const micCount = await alice.getByRole('button', { name: /^Proposition / }).count();
   check('téléphone : 4 micros affichés', micCount === 4, String(micCount));
@@ -200,7 +236,10 @@ try {
   await reveal();
   await shot(ge, 'ge-reveal1'); await shot(alice, 'tel-revelation'); await shot(bob, 'tel-revelation-rate');
   const revText = (await alice.locator('body').innerText()).replace(/\s+/g, ' ');
-  check('téléphone : la révélation montre le résultat, la réponse, le classement et un bouton continuer', /BONNE RÉPONSE/.test(revText) && /\+2/.test(revText) && /C'ÉTAIT/.test(revText) && /CLASSEMENT/.test(revText) && /CONTINUER/.test(revText), revText.slice(0, 350));
+  check('téléphone : la révélation montre le résultat, les points gagnés et la bonne réponse (une seule fois)', /BONNE RÉPONSE/.test(revText) && /\+2/.test(revText) && /C'ÉTAIT/.test(revText) && (revText.match(/TITRE 1/g) || []).length === 1, revText.slice(0, 350));
+  check('téléphone : pas de classement ni de bouton « continuer » sur la révélation', !/CLASSEMENT/.test(revText) && await alice.getByRole('button', { name: /CONTINUER/i }).count() === 0);
+  check('téléphone : la révélation reste dans la DA de la manche 1 (fond marine)', (await alice.evaluate(() => getComputedStyle(document.querySelector('[data-screen="reveal"]')).backgroundColor)) === 'rgb(27, 42, 107)');
+  check('téléphone Bob : résultat « raté » sans classement', /RATÉ/.test(await bob.locator('body').innerText()) && !/CLASSEMENT/.test(await bob.locator('body').innerText()));
   check('révélation : numéro de question toujours visible', /QUESTION 01\/15 · TOTAL 01\/65/.test((await ge.locator('body').innerText()).replace(/\s+/g, ' ')));
   let s = await scores();
   check('Alice : 1 pt + 1 bonus (dernier choix juste, plus rapide)', s.a === 2, JSON.stringify(s));
@@ -250,7 +289,7 @@ try {
   const posOf = () => ge.evaluate(() => Object.fromEntries([...document.querySelectorAll('[data-standing]')].map(el => [el.dataset.standing, Number(el.dataset.pos)])));
   const pos1 = await posOf();
   check('classement : QR code toujours visible', await ge.locator('svg[data-url]').count() === 1);
-  await alice.getByRole('button', { name: /CONTINUER/i }).click();
+  check('téléphone : classement de fin de manche sans bouton « continuer »', /CLASSEMENT/.test(await alice.locator('body').innerText()) && await alice.getByRole('button', { name: /CONTINUER/i }).count() === 0);
   await next();                 // index 15 → manche 2
   check('la manche 2 démarre à la 16e chanson', await host.locator('text=/MANCHE 2 · CHANSON 1\\/15/').count() > 0);
 
@@ -263,7 +302,7 @@ try {
   await shot(ge, 'ge-effet2');
   await sleep(1000);
   await shot(ge, 'ge-transition2');
-  check('transition : manche 2 annoncée', /LE\s+FOCUS/.test(await ge.locator('body').innerText()) && /Trouve le titre/.test(await ge.locator('body').innerText()));
+  check('annonce : manche 2 (tuiles)', /LE\s+FOCUS/.test(await ge.locator('body').innerText()) && /TITRE TROUVÉ/.test(await ge.locator('body').innerText()) && await ge.locator('[data-tile]').count() === 3);
   await start();
   await shot(ge, 'ge-manche2'); await shot(alice, 'tel-manche2');
   const aliceText = await alice.locator('body').innerText();
@@ -271,6 +310,24 @@ try {
   check('téléphone : pas de champ artiste', await alice.getByPlaceholder('Artiste…').count() === 0);
   const s2 = await phoneSeconds(alice);
   check('téléphone : compte à rebours de 30 s', s2 >= 28 && s2 <= 30, String(s2));
+  // Le « S » du décompte et le compteur de réponses ne bougent jamais, quel que soit le chiffre affiché
+  {
+    const samples = [];
+    for (let i = 0; i < 6; i++) {
+      samples.push(await ge.evaluate(() => {
+        const n = document.querySelector('[data-countdown]').getBoundingClientRect();
+        const l = document.querySelector('[data-countdown-label]').getBoundingClientRect();
+        return { digits: document.querySelector('[data-countdown]').textContent, nx: Math.round(n.left), ny: Math.round(n.top), lx: Math.round(l.left), ly: Math.round(l.top) };
+      }));
+      await sleep(1100);
+    }
+    const distinct = new Set(samples.map(x => x.digits)).size;
+    const stable = samples.every(x => x.lx === samples[0].lx && x.ly === samples[0].ly && x.nx === samples[0].nx && x.ny === samples[0].ny);
+    check(`décompte : le « S » et le texte ne bougent pas (${distinct} chiffres différents testés)`, distinct >= 4 && stable, JSON.stringify(samples));
+  }
+  const geR2 = (await ge.locator('body').innerText()).replace(/\s+/g, ' ');
+  check('manche 2 : plus de doublon « question » au centre', (geR2.match(/QUESTION/g) || []).length === 1 && !/AU TOTAL/.test(geR2));
+  check('manche 2 : le top 3 reste affiché au centre', /EN TÊTE/.test(geR2));
   check('grand écran : thème affiché', /THÈME/.test(await ge.locator('body').innerText()) && (await ge.locator('body').innerText()).includes('THEME 16'));
   let b2 = await scores();
   await answer(alice, 'titre 16');
@@ -361,12 +418,38 @@ try {
   check('téléphone manche 4 : « en lice 2 / 3 » en direct', /EN LICE · 2 \/ 3/.test((await alice.locator('body').innerText()).replace(/\s+/g, ' ')), (await alice.locator('body').innerText()).slice(0, 300));
   const audioPlaying = () => host.evaluate(() => { const a = document.querySelector('audio'); return !a.paused; });
   console.log('  … attente de la coupure de la musique à 30 s');
-  await sleep(31500);
+  const barsOff = () => ge.evaluate(() => [...document.querySelectorAll('[data-bar]')].map((b, i) => b.dataset.bar === 'off' ? i : -1).filter(i => i >= 0));
+  const off0 = await barsOff();
+  await sleep(6000);
+  const off1 = await barsOff();
+  await sleep(25500);
+  const off2 = await barsOff();
   await shot(ge, 'ge-manche4-coupee');
+  const lastK = (k) => Array.from({ length: k }, (_, i) => 16 - k + i);
+  check('manche 4 : les barres de son s’éteignent au hasard, petit à petit (0 → ' + off1.length + ' → ' + off2.length + ' sur 16)',
+    off0.length === 0 && off1.length >= 1 && off2.length > off1.length && off2.length <= 14 && off1.every(i => off2.includes(i)) && JSON.stringify(off2) !== JSON.stringify(lastK(off2.length)), JSON.stringify({ off0, off1, off2 }));
+  const geR4 = (await ge.locator('body').innerText()).replace(/\s+/g, ' ');
+  check('manche 4 : aucun classement affiché au centre (suspens)', !/CLASSEMENT|EN TÊTE/.test(geR4) && /EN LICE/.test(geR4), geR4.slice(0, 250));
   check('manche 4 : musique coupée après 30 s (régie)', /MUSIQUE COUPÉE/.test(await host.locator('body').innerText()) && !(await audioPlaying()));
   check('manche 4 : musique coupée annoncée aux joueurs', /MUSIQUE COUPÉE/.test(await alice.locator('body').innerText()));
   check('manche 4 : musique coupée annoncée au grand écran', /MUSIQUE COUPÉE/.test(await ge.locator('body').innerText()));
   check('manche 4 : réponses toujours ouvertes après la coupure', await alice.getByRole('button', { name: /VALIDER/ }).isEnabled());
+
+  // ── Arrivée par QR code : seul le pseudo est à taper ───────
+  console.log('\nRejoindre par QR code');
+  const dana = await context.newPage();
+  await dana.setViewportSize({ width: 390, height: 850 });
+  watch(dana, 'Dana');
+  await dana.addInitScript(() => localStorage.clear());   // téléphone tout neuf
+  await dana.goto(qrUrl);
+  check('QR code : le code de la partie est déjà rempli', (await dana.getByPlaceholder('OSE-XXXX').inputValue()) === CODE);
+  await dana.getByPlaceholder('Ton pseudo').fill('Dana');
+  await dana.getByRole('button', { name: /ENTRER EN SCÈNE/ }).click();
+  await host.waitForSelector('text=4 JOUEUR', { timeout: 15000 }).then(() => check('QR code : le joueur rejoint la partie sans taper le code', true), () => check('QR code : le joueur rejoint la partie sans taper le code', false, 'pas de 4e joueur'));
+  // Elle arrive en pleine chanson : elle est mise directement dans la partie, avec le temps restant
+  await dana.waitForSelector('[data-seconds]');
+  const danaSec = await phoneSeconds(dana);
+  check('QR code : arrivée en cours de chanson, le téléphone reçoit le décompte restant', danaSec > 0 && danaSec <= 45 && await dana.locator('[data-screen="game"]').count() === 1, String(danaSec));
 
   // Podium final
   await next(8);                // index 64
@@ -390,22 +473,14 @@ try {
   const poText = (await ge.locator('body').innerText()).replace(/\s+/g, ' ');
   check('grand écran : podium (3 premiers)', /PODIUM/.test(poText) && ['Alice', 'Bob', 'Cleo'].every(n => poText.includes(n)), poText.slice(0, 250));
   await shot(ge, 'ge-podium');
-  check('téléphone : podium', /PODIUM/.test(await alice.locator('body').innerText()));
-
-  // ── Arrivée par QR code : seul le pseudo est à taper ───────
-  console.log('\nRejoindre par QR code');
-  const dana = await context.newPage();
-  await dana.setViewportSize({ width: 390, height: 850 });
-  watch(dana, 'Dana');
-  await dana.addInitScript(() => localStorage.clear());   // téléphone tout neuf
-  await dana.goto(qrUrl);
-  check('QR code : le code de la partie est déjà rempli', (await dana.getByPlaceholder('OSE-XXXX').inputValue()) === CODE);
-  await dana.getByPlaceholder('Ton pseudo').fill('Dana');
-  await dana.getByRole('button', { name: /ENTRER EN SCÈNE/ }).click();
-  await host.waitForSelector('text=4 JOUEUR', { timeout: 15000 }).then(() => check('QR code : le joueur rejoint la partie sans taper le code', true), () => check('QR code : le joueur rejoint la partie sans taper le code', false, 'pas de 4e joueur'));
-  await dana.waitForSelector('text=JOUEURS CONNECTÉS');
-  const danaText = await dana.locator('body').innerText();
-  check('QR code : le téléphone est connecté, il voit les autres joueurs', ['Alice', 'Bob', 'Cleo', 'Dana'].every(n => danaText.includes(n)), danaText.slice(0, 300));
+  await sleep(500);
+  const alicePod = (await alice.locator('body').innerText()).replace(/\s+/g, ' ');
+  const danaPod = (await dana.locator('body').innerText()).replace(/\s+/g, ' ');
+  await shot(alice, 'tel-podium'); await shot(dana, 'tel-podium-hors');
+  check('téléphone : podium à la nouvelle DA, un joueur du podium voit « BRAVO »', /PODIUM/.test(alicePod) && /BRAVO/.test(alicePod) && /N°1/.test(alicePod) && await alice.locator('[data-podium-rank]').count() === 3, alicePod.slice(0, 250));
+  check('téléphone : un joueur hors podium voit son propre classement (N°4)', /TON CLASSEMENT/.test(danaPod) && /N°4/.test(danaPod) && (await dana.locator('[data-me="true"]').count()) === 1, danaPod.slice(0, 300));
+  check('téléphone : le podium est le seul écran qui peut défiler', (await dana.evaluate(() => getComputedStyle(document.querySelector('[data-screen="podium"]')).overflowY)) === 'auto' && (await alice.evaluate(() => getComputedStyle(document.querySelector('[data-screen="podium"]')).overflowY)) === 'auto');
+  check('grand écran : « V.3.0 » toujours affiché sur le podium', (await ge.locator('[data-version]').first().innerText()) === 'V.3.0');
 
   check('aucune erreur JavaScript dans les pages', errors.length === 0, errors.slice(0, 3).join(' | '));
 } catch (e) {

@@ -54,3 +54,8 @@
 @keyframes ge-lift { from { transform: translateY(40px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 .ge-lift { animation: ge-lift .7s cubic-bezier(.2, .9, .3, 1) both; }
 @media (prefers-reduced-motion: reduce) { .ge-grid-scroll, .ge-blink, .ge-lift { animation: none; } }
+
+/* Texte défilant (annonce de manche) : deux copies côte à côte, défilement sans fin */
+@keyframes ge-ticker { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+.ge-ticker { display: inline-block; animation: ge-ticker 150s linear infinite; padding-left: 24px; will-change: transform; }
+@media (prefers-reduced-motion: reduce) { .ge-ticker { animation: none; } }

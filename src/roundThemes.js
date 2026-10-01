@@ -10,7 +10,7 @@ export const ROUND_THEMES = {
     bars: { count: 40, min: 0.7, rng: 0.5, gap: 6, seed: 10, fill: 'linear-gradient(0deg,#FF5A4E,#FFC933)', glow: 'rgba(255,201,51,.5)' },
     sun: 'linear-gradient(#FFC933,#FF5A4E)', annGrid: 'rgba(255,201,51,.4)',
     pts: '1 PT + BONUS +1',
-    rule: 'Choisis le bon micro. Juste : 1 pt. Le plus rapide : +1 pt.',
+    tiles: [{ v: '30 S', l: 'POUR RÉPONDRE' }, { v: '1 PT', l: 'BONNE RÉPONSE' }, { v: '+1', l: 'LE PLUS RAPIDE' }],
   },
   2: {
     label: 'LE FOCUS', t1: 'LE', t2: 'FOCUS',
@@ -19,7 +19,7 @@ export const ROUND_THEMES = {
     bars: { count: 7, min: 2.4, rng: 1.6, gap: 22, seed: 20, fill: '#F4EBD9', glow: 'rgba(244,235,217,.35)', heights: [40, 70, 90, 100, 85, 65, 45] },
     sun: 'linear-gradient(#F4EBD9,#8A8A8F)', annGrid: 'rgba(244,235,217,.14)',
     pts: 'TITRE SEUL · 2 PTS + BONUS +1',
-    rule: 'Trouve le titre du thème. Juste : 2 pts. Le plus rapide : +1 pt.',
+    tiles: [{ v: '30 S', l: 'POUR RÉPONDRE' }, { v: '2 PTS', l: 'TITRE TROUVÉ' }, { v: '+1', l: 'LE PLUS RAPIDE' }],
   },
   3: {
     label: 'FAST AND MUSICOUS', t1: 'FAST AND', t2: 'MUSICOUS',
@@ -28,7 +28,7 @@ export const ROUND_THEMES = {
     bars: { count: 40, min: 0.7, rng: 0.4, gap: 6, seed: 50, fill: 'linear-gradient(0deg,#00E5FF,#FF2E93)', glow: 'rgba(0,229,255,.6)' },
     sun: 'linear-gradient(#FF2E93,#00E5FF)', annGrid: 'rgba(0,229,255,.4)',
     pts: '3 PTS / 1 PT + BONUS +3/+2/+1',
-    rule: 'Titre + artiste : 3 pts. L’un des deux : 1 pt. Les 3 plus rapides : +3 · +2 · +1.',
+    tiles: [{ v: '45 S', l: 'POUR RÉPONDRE' }, { v: '3 PTS', l: 'TITRE + ARTISTE' }, { v: '1 PT', l: 'L’UN DES DEUX' }, { v: '+3 +2 +1', l: 'LES 3 PLUS RAPIDES' }],
   },
   4: {
     label: "LE BATTLE ROYAL D'OSE", t1: 'BATTLE ROYAL', t2: "D'OSE",
@@ -37,7 +37,7 @@ export const ROUND_THEMES = {
     bars: { count: 16, min: 1.0, rng: 0.5, gap: 10, seed: 90, fill: '#E10600', glow: 'rgba(225,6,0,.5)' },
     sun: 'linear-gradient(#E10600,#5a0200)', annGrid: 'rgba(225,6,0,.45)',
     pts: '5 PTS / 2 PTS · ÉLIMINATION',
-    rule: 'Titre + artiste : 5 pts. L’un des deux : 2 pts. Raté : éliminé. Musique coupée à 30 s.',
+    tiles: [{ v: '45 S', l: 'POUR RÉPONDRE', s: 'MUSIQUE COUPÉE À 30 S' }, { v: '5 PTS', l: 'TITRE + ARTISTE' }, { v: '2 PTS', l: 'L’UN DES DEUX' }, { v: 'ÉLIMINÉ', l: 'SI TOUT EST FAUX' }],
   },
 };
 
@@ -47,21 +47,23 @@ export const roundSeconds = (round) => ROUND_CONFIG[round].seconds;
 export const rnd = (i) => ((Math.sin(i * 12.9898) * 43758.5453) % 1 + 1) % 1;
 
 // Barres d'égaliseur : nombre, hauteur, durée et décalage d'animation.
-// Manche 4 : toujours 16 barres ; la part de barres « tombées » suit la part de joueurs éliminés.
-export const buildBars = (round, aliveList) => {
+export const buildBars = (round) => {
   const t = ROUND_THEMES[round].bars;
-  let deadBars = 0;
-  if (round === 4 && aliveList && aliveList.length > 0) {
-    const dead = aliveList.filter(a => a === false).length;
-    deadBars = Math.round(t.count * dead / aliveList.length);
-  }
   return Array.from({ length: t.count }, (_, i) => ({
     h: t.heights ? t.heights[i % t.heights.length] : 100,
     dur: (t.min + rnd(i + t.seed) * t.rng).toFixed(2),
     delay: (-rnd(i + t.seed + 7) * 2).toFixed(2),
-    dead: i >= t.count - deadBars,
   }));
 };
+
+// Manche 4 : les barres de son s'éteignent une à une, dans un ordre aléatoire, pendant le décompte.
+// Ordre d'extinction (mélange déterministe : le même pour toutes les machines, différent à chaque chanson).
+export const barVanishOrder = (n, seed = 0) =>
+  Array.from({ length: n }, (_, i) => i).sort((a, b) => rnd(a * 7.31 + seed * 3.17 + 1) - rnd(b * 7.31 + seed * 3.17 + 1));
+
+// Nombre de barres éteintes après `elapsed` secondes sur `total` (toutes éteintes à la fin du décompte).
+export const vanishedBars = (n, elapsed, total) =>
+  total > 0 ? Math.max(0, Math.min(n, Math.floor((elapsed / total) * n))) : 0;
 
 export const formatSeconds = (s) => (typeof s === 'number' && !Number.isNaN(s) ? `${s.toFixed(1).replace('.', ',')} s` : '');
 
