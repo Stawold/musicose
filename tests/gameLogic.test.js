@@ -130,14 +130,47 @@ test('propositions : utilise song.choices quand fournies, complète sinon', () =
   assert.ok(partial.some(o => o.title === 'Faux A'));
 });
 
-test('propositions : pas de mauvaise proposition du même artiste que la bonne', () => {
+test('propositions : un piège du même artiste est conservé quand il est écrit dans choices', () => {
   const custom = songs.map(s => ({ ...s }));
   custom[0].choices = [
-    { title: 'Autre titre', artist: custom[0].artist },
-    { title: 'Faux 2', artist: 'Y' }, { title: 'Faux 3', artist: 'Z' }, { title: 'Faux 4', artist: 'W' },
+    { title: 'Autre titre du même artiste', artist: custom[0].artist },
+    { title: 'Faux 2', artist: 'Y' }, { title: 'Faux 3', artist: 'Z' },
   ];
   const { options } = buildOptions(custom, 0, seeded(9));
-  assert.equal(options.filter(o => o.artist === custom[0].artist).length, 1);
+  assert.equal(options.filter(o => o.artist === custom[0].artist).length, 2);   // la bonne + le piège
+  assert.ok(options.some(o => o.title === 'Autre titre du même artiste'));
+});
+
+test('propositions : la bonne réponse écrite dans choices est ignorée (liste de 4 acceptée)', () => {
+  const custom = songs.map(s => ({ ...s }));
+  custom[1].choices = [
+    { title: 'Piège 1', artist: custom[1].artist },
+    { title: custom[1].title, artist: custom[1].artist },   // la bonne réponse : ignorée
+    { title: 'Piège 2', artist: 'X' },
+    { title: 'Piège 3', artist: 'Y' },
+  ];
+  const { options, correctIndex } = buildOptions(custom, 1, seeded(2));
+  assert.deepEqual(options.map(o => o.title).sort(), [custom[1].title, 'Piège 1', 'Piège 2', 'Piège 3'].sort());
+  assert.equal(options[correctIndex].title, custom[1].title);
+});
+
+test('propositions : un titre identique à la bonne réponse est ignoré, même avec un autre artiste', () => {
+  const custom = songs.map(s => ({ ...s }));
+  custom[2].choices = [{ title: custom[2].title, artist: 'Une reprise' }, { title: 'Faux 2', artist: 'Y' }, { title: 'Faux 3', artist: 'Z' }];
+  const { options } = buildOptions(custom, 2, seeded(4));
+  assert.equal(options.filter(o => o.title === custom[2].title).length, 1);
+  assert.equal(options.length, 4);
+});
+
+test('propositions : les chansons ajoutées automatiquement ne sont jamais du même artiste', () => {
+  const custom = songs.map(s => ({ ...s }));
+  custom[0].choices = [{ title: 'Faux 1', artist: 'Y' }];   // incomplet : 2 propositions à compléter
+  custom[5].artist = custom[0].artist;                      // une autre chanson du même artiste dans la manche 1
+  for (let n = 1; n <= 50; n++) {
+    const { options } = buildOptions(custom, 0, seeded(n));
+    assert.equal(options.length, 4);
+    assert.equal(options.filter(o => o.artist === custom[0].artist).length, 1);
+  }
 });
 
 test('thème : utilise song.theme, sinon repli sur l’artiste', () => {

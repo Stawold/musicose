@@ -153,30 +153,33 @@ const shuffle = (arr, rng) => {
   return a;
 };
 
-// song.choices (optionnel) : 3 mauvaises propositions [{title, artist}, ...].
-// Si absent ou incomplet, on complète avec des chansons de la playlist (autre artiste).
+// song.choices (optionnel) : mauvaises propositions [{title, artist}, ...] (3 attendues).
+// - La bonne réponse peut y figurer : elle est ignorée. Une proposition de même titre que la bonne est ignorée.
+// - Une mauvaise proposition du même artiste que la bonne réponse est acceptée : c'est un piège voulu.
+// - Si elles sont moins de 3, on complète avec des chansons de la playlist (jamais du même artiste ni du même titre).
 // Renvoie { options: [{title, artist} x4 mélangées], correctIndex }.
 export const buildOptions = (songs, songIndex, rng = Math.random) => {
   const song = songs[songIndex];
   const good = { title: song.title, artist: song.artist };
-  const sameKey = (a, b) => normalize(a.title) === normalize(b.title) || normalize(a.artist) === normalize(b.artist);
+  const sameTitle = (a, b) => normalize(a.title) === normalize(b.title);
+  const sameTitleOrArtist = (a, b) => sameTitle(a, b) || normalize(a.artist) === normalize(b.artist);
 
   const wrong = [];
-  const addWrong = (c) => {
+  const addWrong = (c, strict) => {
     if (!c || !c.title || !c.artist) return;
-    if (sameKey(c, good)) return;
+    if (strict ? sameTitleOrArtist(c, good) : sameTitle(c, good)) return;
     if (wrong.some(w => normalize(w.title) === normalize(c.title))) return;
     wrong.push({ title: c.title, artist: c.artist });
   };
 
-  (Array.isArray(song.choices) ? song.choices : []).forEach(addWrong);
+  (Array.isArray(song.choices) ? song.choices : []).forEach(c => addWrong(c, false));
 
   if (wrong.length < CHOICE_COUNT - 1) {
     const { start, end } = ROUND_CONFIG[1];
     const inRound = songs.slice(start, end + 1).filter((_, i) => start + i !== songIndex);
     const others = songs.filter((_, i) => i !== songIndex);
-    shuffle(inRound, rng).forEach(s => wrong.length < CHOICE_COUNT - 1 && addWrong(s));
-    shuffle(others, rng).forEach(s => wrong.length < CHOICE_COUNT - 1 && addWrong(s));
+    shuffle(inRound, rng).forEach(s => wrong.length < CHOICE_COUNT - 1 && addWrong(s, true));
+    shuffle(others, rng).forEach(s => wrong.length < CHOICE_COUNT - 1 && addWrong(s, true));
   }
 
   const all = shuffle([good, ...wrong.slice(0, CHOICE_COUNT - 1)], rng);

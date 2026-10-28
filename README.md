@@ -32,7 +32,7 @@ Les chansons doivent être **dans l'ordre du jeu** (15 + 15 + 25 + 10) :
 }
 ```
 
-- `choices` (manche 1, facultatif) : les **3 mauvaises** propositions. Si absent ou incomplet, elles sont complétées automatiquement avec d'autres chansons de la playlist.
+- `choices` (manche 1, facultatif) : les mauvaises propositions (3 attendues). La bonne réponse peut y figurer, elle est ignorée. Une proposition du même artiste que la bonne réponse est conservée (piège voulu). Si absent ou incomplet, le jeu complète avec d'autres chansons de la manche 1 (jamais du même artiste).
 - `theme` (manche 2, facultatif) : affiché aux joueurs à la place de l'artiste. Si absent, l'artiste est affiché.
 - La régie affiche `⚠ n/65 CHANSONS` si la playlist n'a pas exactement 65 chansons.
 
